@@ -1,10 +1,13 @@
 """Generic webhook provider class."""
 
 import json
+import logging
 from datetime import datetime
 from typing import Any
 
 from .base import WebhookProvider
+
+logger = logging.getLogger(__name__)
 
 
 class GenericProvider(WebhookProvider):
@@ -17,9 +20,15 @@ class GenericProvider(WebhookProvider):
         """
         message = self.format_message(seasons)
 
-        payload_template = self.config.get("webhook_payload_template")
+        payload_template = self.config.get("webhook_payload_template") or self.config.get(
+            "payload_template"
+        )
 
-        if payload_template:
+        if payload_template and payload_template != "default":
+            logger.debug(
+                "Using custom payload template: %.200s",
+                payload_template,
+            )
             # Custom template with variable substitution
             show_list = (
                 ", ".join([f"{s['show']} S{s['season']}" for s in seasons]) if seasons else "None"
@@ -39,12 +48,20 @@ class GenericProvider(WebhookProvider):
             template_str = template_str.replace("{seasons}", json.dumps(seasons))
 
             try:
-                return dict(json.loads(template_str))
+                payload = dict(json.loads(template_str))
+                logger.debug(
+                    "Custom payload built with keys: %s, season_count=%d",
+                    sorted(payload.keys()),
+                    len(seasons),
+                )
+                return payload
             except json.JSONDecodeError as e:
-                self.logger.error(f"Failed to parse custom payload template: {e}")
+                logger.error("Failed to parse custom payload template: %s", e)
+                logger.warning("Falling back to default payload template")
                 # Fall back to default template
 
         # Default template
+        logger.debug("Using default payload template with season_count=%d", len(seasons))
         return {
             "timestamp": datetime.now().isoformat(),
             "period_days": self.config.get("lookback_days", 7),

@@ -1,11 +1,14 @@
 """Signal CLI webhook provider."""
 
 import base64
+import logging
 from datetime import datetime
 from typing import Any
 from urllib.request import urlopen
 
 from .base import WebhookProvider
+
+logger = logging.getLogger(__name__)
 
 
 class SignalCliProvider(WebhookProvider):
@@ -14,11 +17,14 @@ class SignalCliProvider(WebhookProvider):
     def validate_config(self) -> bool:
         """Validate signal-cli configuration."""
         required = ["signal_number", "signal_recipients"]
+        logger.debug("Validating Signal CLI config fields: %s", required)
+        valid = True
         for key in required:
             if not self.config.get(key):
-                self.logger.error(f"Missing required config: {key}")
-                return False
-        return True
+                logger.error("Missing required config: %s", key)
+                valid = False
+        logger.info("Signal CLI config validation result: %s", valid)
+        return valid
 
     def should_send_on_empty(self) -> bool:
         """Never send Signal messages when there are no new seasons."""
@@ -28,8 +34,11 @@ class SignalCliProvider(WebhookProvider):
         """Parse comma-separated recipient list."""
         recipients_str = self.config.get("signal_recipients", "")
         if not recipients_str:
+            logger.debug("Parsed 0 Signal recipients")
             return []
-        return [r.strip() for r in recipients_str.split(",") if r.strip()]
+        recipients = [r.strip() for r in recipients_str.split(",") if r.strip()]
+        logger.debug("Parsed %d Signal recipients", len(recipients))
+        return recipients
 
     def _get_covers_as_base64(self, seasons: list[dict[str, Any]]) -> list[str]:
         """Download and encode covers as base64."""
@@ -39,11 +48,17 @@ class SignalCliProvider(WebhookProvider):
             if not cover_url:
                 continue
             try:
+                logger.debug(
+                    "Downloading cover for %s from %s",
+                    season.get("show"),
+                    cover_url,
+                )
                 with urlopen(cover_url, timeout=30) as response:
                     image_data = response.read()
                     base64_covers.append(base64.b64encode(image_data).decode("utf-8"))
             except Exception as e:
-                self.logger.warning(f"Failed to download cover for {season['show']}: {e}")
+                logger.warning("Failed to download cover for %s: %s", season["show"], e)
+        logger.info("Downloaded %d cover(s) for Signal payload", len(base64_covers))
         return base64_covers
 
     def format_message(self, seasons: list[dict[str, Any]]) -> str:
@@ -66,7 +81,13 @@ class SignalCliProvider(WebhookProvider):
         lines.append("")
         lines.append(f"_{datetime.now().strftime('%Y-%m-%d %H:%M')}_")
 
-        return "\n".join(lines)
+        message = "\n".join(lines)
+        logger.debug(
+            "Formatted Signal message (length=%d, lines=%d)",
+            len(message),
+            len(lines),
+        )
+        return message
 
     def build_payload(self, seasons: list[dict[str, Any]]) -> dict[str, Any]:
         """Build signal-cli-rest-api payload."""
@@ -84,5 +105,12 @@ class SignalCliProvider(WebhookProvider):
             base64_covers = self._get_covers_as_base64(seasons)
             if base64_covers:
                 payload["base64_attachments"] = base64_covers
+
+        logger.info(
+            "Signal payload summary: recipients=%d, attachments=%s, message_length=%d",
+            len(recipients),
+            "base64_attachments" in payload,
+            len(message),
+        )
 
         return payload

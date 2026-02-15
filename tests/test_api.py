@@ -1,13 +1,19 @@
-"""
-Tests for Tautulli API integration and data fetching functions.
-"""
+"""Tests for Tautulli API integration and data fetching functions."""
 
+import os
+import sys
+
+import importlib
 import json
+from email.message import Message
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError, URLError
 
-from new_seasons_reminder import api
-from new_seasons_reminder.api import get_cover_url, get_show_cover
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+
+api = importlib.import_module("new_seasons_reminder.api")
+get_cover_url = api.get_cover_url
+get_show_cover = api.get_show_cover
 
 
 class TestMakeTautulliRequest:
@@ -62,7 +68,11 @@ class TestMakeTautulliRequest:
     def test_http_error(self, mock_urlopen):
         """Test handling of HTTP error."""
         mock_urlopen.side_effect = HTTPError(
-            url="http://test.com", code=404, msg="Not Found", hdrs={}, fp=None
+            url="http://test.com",
+            code=404,
+            msg="Not Found",
+            hdrs=Message(),
+            fp=None,
         )
 
         result = api.make_tautulli_request(
@@ -121,7 +131,7 @@ class TestGetRecentlyAdded:
     @patch("new_seasons_reminder.api.make_tautulli_request")
     def test_get_recently_added_success(self, mock_request, mock_tautulli_response):
         """Test successful fetch of recently added items."""
-        mock_request.return_value = mock_tautulli_response["response"]["data"]
+        mock_request.return_value = {"recently_added": mock_tautulli_response["response"]["data"]}
 
         result = api.get_recently_added(
             media_type="season",
@@ -132,6 +142,21 @@ class TestGetRecentlyAdded:
 
         assert len(result) == 2
         assert result[0]["media_type"] == "season"
+
+    @patch("new_seasons_reminder.api.make_tautulli_request")
+    def test_get_recently_added_list_response(self, mock_request, mock_tautulli_response):
+        """Test backwards compatibility for list response."""
+        mock_request.return_value = mock_tautulli_response["response"]["data"]
+
+        result = api.get_recently_added(
+            media_type="season",
+            count=10,
+            tautulli_url="http://localhost:8181",
+            tautulli_apikey="test-api-key",
+        )
+
+        assert len(result) == 2
+        assert result[1]["media_type"] == "season"
 
     @patch("new_seasons_reminder.api.make_tautulli_request")
     def test_get_recently_added_empty_response(self, mock_request):
@@ -159,15 +184,18 @@ class TestGetRecentlyAdded:
 
     @patch("new_seasons_reminder.api.make_tautulli_request")
     def test_get_recently_added_non_list_response(self, mock_request):
-        """Test handling when response is not a list."""
-        mock_request.return_value = {"unexpected": "dict"}
+        """Test handling when response is a dict wrapper."""
+        mock_request.return_value = {
+            "recently_added": [{"rating_key": "123", "title": "Season 1", "media_type": "season"}]
+        }
 
         result = api.get_recently_added(
             tautulli_url="http://localhost:8181",
             tautulli_apikey="test-api-key",
         )
 
-        assert result == []
+        assert len(result) == 1
+        assert result[0]["rating_key"] == "123"
 
 
 class TestGetMetadata:
@@ -208,6 +236,23 @@ class TestGetChildrenMetadata:
     @patch("new_seasons_reminder.api.make_tautulli_request")
     def test_get_children_success(self, mock_request, mock_seasons_data):
         """Test successful children metadata fetch."""
+        mock_request.return_value = {
+            "children_count": len(mock_seasons_data),
+            "children_list": mock_seasons_data,
+        }
+
+        result = api.get_children_metadata(
+            "11111",
+            tautulli_url="http://localhost:8181",
+            tautulli_apikey="test-api-key",
+        )
+
+        assert len(result) == 3
+        assert all(child.get("rating_key") for child in result)
+
+    @patch("new_seasons_reminder.api.make_tautulli_request")
+    def test_get_children_list_response(self, mock_request, mock_seasons_data):
+        """Test backwards compatibility for list response."""
         mock_request.return_value = mock_seasons_data
 
         result = api.get_children_metadata(
@@ -235,11 +280,14 @@ class TestGetChildrenMetadata:
     @patch("new_seasons_reminder.api.make_tautulli_request")
     def test_get_children_filters_missing_rating_key(self, mock_request):
         """Test that children without rating_key are filtered out."""
-        mock_request.return_value = [
-            {"title": "Season 1", "rating_key": "123"},
-            {"title": "Season 2"},  # No rating_key
-            {"title": "Season 3", "rating_key": "456"},
-        ]
+        mock_request.return_value = {
+            "children_count": 3,
+            "children_list": [
+                {"title": "Season 1", "rating_key": "123"},
+                {"title": "Season 2"},  # No rating_key
+                {"title": "Season 3", "rating_key": "456"},
+            ],
+        }
 
         result = api.get_children_metadata(
             "11111",

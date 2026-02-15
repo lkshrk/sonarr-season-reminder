@@ -41,11 +41,22 @@ def make_tautulli_request(
         base_params.update(params)
 
     url = urljoin(tautulli_url.rstrip("/") + "/", "api/v2") + "?" + urlencode(base_params)
+    safe_params = base_params.copy()
+    if "apikey" in safe_params:
+        safe_params["apikey"] = "***"
+    safe_url = urljoin(tautulli_url.rstrip("/") + "/", "api/v2") + "?" + urlencode(safe_params)
 
     try:
         logger.debug(f"Making request to Tautulli API: {cmd}")
+        logger.debug(f"Tautulli API URL: {safe_url}")
         with urlopen(url, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8"))
+            raw_response = response.read()
+            logger.debug(
+                "Tautulli API raw response type=%s size=%s",
+                type(raw_response).__name__,
+                len(raw_response),
+            )
+            data = json.loads(raw_response.decode("utf-8"))
             if data.get("response", {}).get("result") == "success":
                 return data.get("response", {}).get("data")
             else:
@@ -92,8 +103,23 @@ def get_recently_added(
         tautulli_url=tautulli_url,
         tautulli_apikey=tautulli_apikey,
     )
+    logger.debug("get_recently_added raw data type=%s", type(data).__name__)
     if data:
-        return data if isinstance(data, list) else []
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            items = data.get("recently_added", [])
+        else:
+            items = []
+        logger.debug("get_recently_added extracted %s items", len(items))
+        for item in items:
+            logger.debug(
+                "get_recently_added item rating_key=%s title=%s media_type=%s",
+                item.get("rating_key"),
+                item.get("title"),
+                item.get("media_type"),
+            )
+        return items
     return []
 
 
@@ -113,12 +139,14 @@ def get_metadata(
         Metadata dictionary if successful, None otherwise.
     """
     params = {"rating_key": rating_key}
+    logger.debug("get_metadata rating_key=%s", rating_key)
     result = make_tautulli_request(
         "get_metadata",
         params,
         tautulli_url=tautulli_url,
         tautulli_apikey=tautulli_apikey,
     )
+    logger.debug("get_metadata found=%s", isinstance(result, dict))
     return result if isinstance(result, dict) else None
 
 
@@ -144,9 +172,18 @@ def get_children_metadata(
         tautulli_url=tautulli_url,
         tautulli_apikey=tautulli_apikey,
     )
+    logger.debug("get_children_metadata rating_key=%s", rating_key)
+    logger.debug("get_children_metadata raw data type=%s", type(data).__name__)
     if data:
-        children: list[dict] = data if isinstance(data, list) else []
-        return [child for child in children if child.get("rating_key")]
+        if isinstance(data, list):
+            children = data
+        elif isinstance(data, dict):
+            children = data.get("children_list", [])
+        else:
+            children = []
+        filtered_children = [child for child in children if child.get("rating_key")]
+        logger.debug("get_children_metadata extracted %s children", len(filtered_children))
+        return filtered_children
     return []
 
 
@@ -174,7 +211,9 @@ def get_cover_url(
 
     full_url = urljoin(plex_url.rstrip("/") + "/", thumb_path.lstrip("/"))
     separator = "&" if "?" in full_url else "?"
-    return f"{full_url}{separator}X-Plex-Token={plex_token}"
+    cover_url = f"{full_url}{separator}X-Plex-Token={plex_token}"
+    logger.debug("get_cover_url thumb_path=%s url=%s", thumb_path, cover_url)
+    return cover_url
 
 
 def get_show_cover(
@@ -202,11 +241,15 @@ def get_show_cover(
         tautulli_apikey=tautulli_apikey,
     )
     if not metadata:
+        logger.debug("get_show_cover rating_key=%s found=False", rating_key)
         return None
 
     thumb = metadata.get("thumb") or metadata.get("art") or metadata.get("poster_thumb")
     if thumb:
-        return get_cover_url(thumb, plex_url=plex_url, plex_token=plex_token)
+        cover_url = get_cover_url(thumb, plex_url=plex_url, plex_token=plex_token)
+        logger.debug("get_show_cover rating_key=%s found=%s", rating_key, bool(cover_url))
+        return cover_url
+    logger.debug("get_show_cover rating_key=%s found=False", rating_key)
     return None
 
 
@@ -223,9 +266,13 @@ def download_cover_as_base64(cover_url: str) -> str | None:
         return None
 
     try:
+        logger.debug("download_cover_as_base64 url=%s", cover_url)
         with urlopen(cover_url, timeout=30) as response:
             image_data = response.read()
-            return base64.b64encode(image_data).decode("utf-8")
+            encoded = base64.b64encode(image_data).decode("utf-8")
+            logger.debug("download_cover_as_base64 success=True")
+            return encoded
     except Exception as e:
+        logger.debug("download_cover_as_base64 success=False")
         logger.warning(f"Failed to download cover: {e}")
         return None
