@@ -63,16 +63,16 @@ def make_tautulli_request(
                 logger.error(f"Tautulli API error: {data}")
                 return None
     except HTTPError as e:
-        logger.error(f"HTTP Error: {e.code} - {e.reason}")
+        logger.error("HTTP Error on cmd=%s params=%s: %s - %s", cmd, params, e.code, e.reason)
         return None
     except URLError as e:
-        logger.error(f"URL Error: {e.reason}")
+        logger.error("URL Error on cmd=%s params=%s: %s", cmd, params, e.reason)
         return None
     except json.JSONDecodeError as e:
-        logger.error(f"JSON Decode Error: {e}")
+        logger.error("JSON Decode Error on cmd=%s: %s", cmd, e)
         return None
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.error("Unexpected error on cmd=%s: %s", cmd, e)
         return None
 
 

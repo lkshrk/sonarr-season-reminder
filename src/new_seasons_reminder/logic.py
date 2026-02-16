@@ -10,29 +10,37 @@ def is_new_show(
     show_rating_key: str,
     cutoff_date: datetime,
     get_metadata_func: Callable[[str], dict | None],
-) -> bool:
-    logger.debug(f"Checking if show {show_rating_key} is new")
+) -> bool | None:
+    """Check if a show was recently added (i.e. is "new").
+
+    Returns True if new, False if existing, None if metadata lookup failed.
+    """
+    logger.debug("Checking if show %s is new", show_rating_key)
     show_metadata = get_metadata_func(show_rating_key)
     if not show_metadata:
-        logger.warning(f"Could not get metadata for show {show_rating_key}")
-        return False
+        logger.warning("Could not get metadata for show %s", show_rating_key)
+        return None
 
     show_added_at = show_metadata.get("added_at")
     if not show_added_at:
-        logger.debug(f"Show {show_rating_key} missing added_at timestamp")
-        return False
+        logger.debug("Show %s missing added_at timestamp", show_rating_key)
+        return None
 
     try:
         show_date = datetime.fromtimestamp(int(show_added_at), tz=timezone.utc)
         logger.debug(
-            f"Show {show_rating_key} added at {show_date} compared to cutoff {cutoff_date}"
+            "Show %s added at %s compared to cutoff %s",
+            show_rating_key,
+            show_date,
+            cutoff_date,
         )
         if show_date >= cutoff_date:
-            logger.debug(f"Show added at {show_date} - this is a NEW SHOW")
+            logger.debug("Show added at %s - this is a NEW SHOW", show_date)
             return True
-        logger.debug(f"Show added at {show_date} - existing show")
+        logger.debug("Show added at %s - existing show", show_date)
     except (ValueError, TypeError) as e:
-        logger.warning(f"Error parsing added_at for show: {e}")
+        logger.warning("Error parsing added_at for show %s: %s", show_rating_key, e)
+        return None
 
     return False
 
@@ -66,43 +74,10 @@ def is_season_finished(
     return available_episodes > 0
 
 
-def _are_all_seasons_complete(
-    show_rating_key: str,
-    get_children_func: Callable[[str], list[dict]],
-) -> bool:
-    logger.debug("Checking if all seasons of show %s are complete", show_rating_key)
-    seasons = get_children_func(show_rating_key)
-    if not seasons:
-        logger.debug("Show %s has no seasons", show_rating_key)
-        return False
-
-    season_items = [s for s in seasons if s.get("media_type") == "season"]
-    if not season_items:
-        logger.debug("Show %s has no season-type children", show_rating_key)
-        return False
-
-    for season in season_items:
-        season_key = season.get("rating_key")
-        if not season_key:
-            continue
-        episodes = get_children_func(str(season_key))
-        episode_count = sum(1 for ep in episodes if ep.get("media_type") == "episode")
-        if episode_count == 0:
-            logger.debug(
-                "Show %s season %s has no episodes — show is NOT complete",
-                show_rating_key,
-                season.get("title", season_key),
-            )
-            return False
-
-    logger.debug("Show %s: all %d seasons have episodes", show_rating_key, len(season_items))
-    return True
-
-
 def get_new_finished_seasons(
     lookback_days: int,
     get_recently_added_func: Callable[[str, int], list[dict]],
-    is_new_show_func: Callable[[str, datetime], bool],
+    is_new_show_func: Callable[[str, datetime], bool | None],
     get_show_cover_func: Callable[[str], str | None],
     get_children_func: Callable[[str], list[dict]],
     include_new_shows: bool = False,
@@ -113,113 +88,138 @@ def get_new_finished_seasons(
 
     recently_added = get_recently_added_func("show", 100)
     logger.debug("Recently added raw items count: %s", len(recently_added))
-    for item in recently_added:
-        logger.debug(
-            "Recently added item: rating_key=%s title=%s media_type=%s added_at=%s",
-            item.get("rating_key"),
-            item.get("title"),
-            item.get("media_type"),
-            item.get("added_at"),
-        )
     if not recently_added:
         logger.info("No recently added items found")
         return []
 
-    new_seasons = []
-    show_complete_cache: dict[str, bool] = {}
-
+    # Phase 1: Discover unique shows with recent activity
+    discovered_shows: dict[str, str] = {}
     for item in recently_added:
-        media_type = item.get("media_type")
-        if media_type != "season":
-            logger.debug(
-                "Skipping item %s (%s) - media_type=%s",
-                item.get("title"),
-                item.get("rating_key"),
-                media_type,
-            )
+        mt = item.get("media_type")
+        show_key: str | None = None
+        show_name = "Unknown"
+        if mt == "show":
+            show_key = item.get("rating_key")
+            show_name = item.get("title", "Unknown")
+        elif mt == "season":
+            show_key = item.get("parent_rating_key")
+            show_name = item.get("parent_title", "Unknown")
+        elif mt == "episode":
+            show_key = item.get("grandparent_rating_key")
+            show_name = item.get("grandparent_title", "Unknown")
+        if show_key and show_key not in discovered_shows:
+            discovered_shows[show_key] = show_name
+            logger.debug("Discovered show: %s (key=%s) from %s item", show_name, show_key, mt)
+    logger.info("Discovered %d unique show(s) with recent activity", len(discovered_shows))
+
+    # Phase 2: Enumerate ALL seasons per show, filter and collect
+    new_seasons = []
+    is_new_cache: dict[str, bool] = {}
+    episode_cache: dict[str, int] = {}
+
+    for show_key, show_name in discovered_shows.items():
+        logger.debug("Enumerating seasons for show: %s (key=%s)", show_name, show_key)
+        all_children = get_children_func(str(show_key))
+        season_items = [s for s in all_children if s.get("media_type") == "season"]
+        logger.debug("Show %s has %d season(s)", show_name, len(season_items))
+
+        if not season_items:
             continue
 
-        rating_key = item.get("rating_key")
-        title = item.get("title", "Unknown")
-        parent_title = item.get("parent_title", "Unknown")
-        show_rating_key = item.get("parent_rating_key")
-        season_index = item.get("media_index", 0)
-        added_at_timestamp = item.get("added_at")
-
-        if not added_at_timestamp:
-            logger.debug(f"Skipping {title} - no added_at timestamp")
-            continue
-
-        try:
-            added_at = datetime.fromtimestamp(int(added_at_timestamp), tz=timezone.utc)
-            logger.debug(
-                "Parsed added_at for %s (%s): %s",
-                title,
-                rating_key,
-                added_at,
-            )
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Error parsing added_at for {title}: {e}")
-            continue
-
-        if added_at < cutoff_date:
-            logger.debug(f"Skipping {title} - added at {added_at} (before cutoff)")
-            continue
-
-        logger.info(f"Processing: {parent_title} - Season {season_index} (added {added_at})")
-
-        if not show_rating_key:
-            logger.debug(f"Skipping {title} - no parent_rating_key (show key)")
-            continue
-
-        is_new_show_result = is_new_show_func(str(show_rating_key), cutoff_date)
-        logger.debug(
-            "Show %s new show check result: %s",
-            show_rating_key,
-            is_new_show_result,
-        )
-        if is_new_show_result:
-            if not include_new_shows:
-                logger.info(f"Skipping {parent_title} - this is a NEW SHOW, not a new season")
-                continue
-            if show_rating_key not in show_complete_cache:
-                show_complete_cache[show_rating_key] = _are_all_seasons_complete(
-                    str(show_rating_key), get_children_func
+        # is_new_show check (once per show)
+        if show_key not in is_new_cache:
+            is_new = is_new_show_func(str(show_key), cutoff_date)
+            if is_new is None:
+                logger.warning(
+                    "Could not determine if %s (show_key=%s) is new — assuming existing show",
+                    show_name,
+                    show_key,
                 )
-            if not show_complete_cache[show_rating_key]:
-                logger.info(f"Skipping new show {parent_title} - not all seasons have episodes")
+                is_new = False
+            is_new_cache[show_key] = is_new
+
+        if is_new_cache[show_key]:
+            if not include_new_shows:
+                logger.info("Skipping %s - this is a NEW SHOW, not a new season", show_name)
                 continue
-            logger.info(f"Including new show {parent_title} - all seasons have episodes")
 
-        if not rating_key:
-            logger.debug(f"Skipping {title} - no rating_key")
-            continue
+            # Check ALL seasons have episodes before including any
+            all_complete = True
+            for s in season_items:
+                s_key = s.get("rating_key")
+                if not s_key:
+                    continue
+                if s_key not in episode_cache:
+                    eps = get_children_func(str(s_key))
+                    episode_cache[s_key] = len([e for e in eps if e.get("media_type") == "episode"])
+                if episode_cache[s_key] == 0:
+                    all_complete = False
+                    logger.info(
+                        "Skipping new show %s - %s has no episodes",
+                        show_name,
+                        s.get("title", s_key),
+                    )
+                    break
 
-        episodes = get_children_func(str(rating_key))
-        episode_count = len([ep for ep in episodes if ep.get("media_type") == "episode"])
+            if not all_complete:
+                continue
+            logger.info(
+                "Including new show %s - all %d seasons have episodes", show_name, len(season_items)
+            )
 
-        if episode_count == 0:
-            logger.info(f"Skipping {parent_title} Season {season_index} - season not finished")
-            continue
+        # Process individual seasons
+        for season in season_items:
+            rating_key = season.get("rating_key")
+            title = season.get("title", "Unknown")
+            season_index = season.get("media_index", 0)
+            added_at_ts = season.get("added_at")
 
-        cover_url = get_show_cover_func(str(show_rating_key))
-        logger.info(
-            "Accepted season: %s Season %s with %s episodes",
-            parent_title,
-            season_index,
-            episode_count,
-        )
+            if not added_at_ts:
+                logger.debug("Skipping %s %s - no added_at timestamp", show_name, title)
+                continue
 
-        new_seasons.append(
-            {
-                "show": parent_title,
-                "season": season_index,
-                "season_title": title,
-                "added_at": added_at.isoformat(),
-                "episode_count": episode_count,
-                "rating_key": rating_key,
-                "cover_url": cover_url,
-            }
-        )
+            try:
+                added_at = datetime.fromtimestamp(int(added_at_ts), tz=timezone.utc)
+            except (ValueError, TypeError) as e:
+                logger.warning("Error parsing added_at for %s %s: %s", show_name, title, e)
+                continue
+
+            if added_at < cutoff_date:
+                logger.debug(
+                    "Skipping %s %s - added at %s (before cutoff)", show_name, title, added_at
+                )
+                continue
+
+            logger.info("Processing: %s - %s (added %s)", show_name, title, added_at)
+
+            if not rating_key:
+                logger.debug("Skipping %s %s - no rating_key", show_name, title)
+                continue
+
+            if rating_key not in episode_cache:
+                episodes = get_children_func(str(rating_key))
+                episode_cache[rating_key] = len(
+                    [ep for ep in episodes if ep.get("media_type") == "episode"]
+                )
+
+            episode_count = episode_cache[rating_key]
+            if episode_count == 0:
+                logger.info("Skipping %s %s - no episodes", show_name, title)
+                continue
+
+            cover_url = get_show_cover_func(str(show_key))
+            logger.info("Accepted season: %s %s with %d episodes", show_name, title, episode_count)
+
+            new_seasons.append(
+                {
+                    "show": show_name,
+                    "season": season_index,
+                    "season_title": title,
+                    "added_at": added_at.isoformat(),
+                    "episode_count": episode_count,
+                    "rating_key": rating_key,
+                    "cover_url": cover_url,
+                }
+            )
 
     return new_seasons

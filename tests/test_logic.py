@@ -79,7 +79,7 @@ class TestIsNewShow:
 
         result = is_new_show("11111", cutoff_date, mock_get_metadata)
 
-        assert result is False
+        assert result is None
 
     def test_missing_added_at_field(self):
         """Test handling when added_at field is missing."""
@@ -94,7 +94,7 @@ class TestIsNewShow:
 
         result = is_new_show("11111", cutoff_date, mock_get_metadata)
 
-        assert result is False
+        assert result is None
 
     def test_invalid_added_at_timestamp(self):
         """Test handling when added_at timestamp is invalid."""
@@ -109,7 +109,7 @@ class TestIsNewShow:
 
         result = is_new_show("11111", cutoff_date, mock_get_metadata)
 
-        assert result is False
+        assert result is None
 
 
 class TestIsSeasonFinished:
@@ -166,6 +166,8 @@ class TestGetNewFinishedSeasons:
     def test_finds_new_finished_seasons(self):
         """Test successful detection of new finished seasons."""
         now = datetime.now()
+        breaking_bad_added_at = str(int((now - timedelta(days=2)).timestamp()))
+        office_added_at = str(int((now - timedelta(days=1)).timestamp()))
 
         mock_get_recently_added = MagicMock(
             return_value=[
@@ -176,7 +178,7 @@ class TestGetNewFinishedSeasons:
                     "parent_rating_key": "11111",
                     "media_type": "season",
                     "media_index": 3,
-                    "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    "added_at": breaking_bad_added_at,
                 },
                 {
                     "rating_key": "67890",
@@ -185,18 +187,47 @@ class TestGetNewFinishedSeasons:
                     "parent_rating_key": "22222",
                     "media_type": "season",
                     "media_index": 2,
-                    "added_at": str(int((now - timedelta(days=1)).timestamp())),
+                    "added_at": office_added_at,
                 },
             ]
         )
 
         mock_is_new_show = MagicMock(return_value=False)  # Not new shows
-        mock_get_children = MagicMock(
-            return_value=[
-                {"media_type": "episode"},
-                {"media_type": "episode"},
-            ]
-        )
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "media_type": "season",
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_index": 3,
+                        "added_at": breaking_bad_added_at,
+                    }
+                ]
+            if rating_key == "22222":
+                return [
+                    {
+                        "media_type": "season",
+                        "rating_key": "67890",
+                        "title": "Season 2",
+                        "media_index": 2,
+                        "added_at": office_added_at,
+                    }
+                ]
+            if rating_key == "12345":
+                return [
+                    {"media_type": "episode"},
+                    {"media_type": "episode"},
+                ]
+            if rating_key == "67890":
+                return [
+                    {"media_type": "episode"},
+                    {"media_type": "episode"},
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value="http://example.com/cover.jpg")
 
         result = get_new_finished_seasons(
@@ -251,7 +282,21 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=False)
-        mock_get_children = MagicMock(return_value=[])
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_type": "season",
+                        "media_index": 3,
+                        "added_at": str(int((now - timedelta(days=30)).timestamp())),
+                    }
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -282,7 +327,21 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=False)
-        mock_get_children = MagicMock(return_value=[])
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_type": "season",
+                        "media_index": 3,
+                        "added_at": str(int((now - timedelta(days=30)).timestamp())),
+                    }
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -313,7 +372,21 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=True)  # This IS a new show
-        mock_get_children = MagicMock(return_value=[])
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 1",
+                        "media_type": "season",
+                        "media_index": 1,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    }
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -344,7 +417,23 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=False)
-        mock_get_children = MagicMock(return_value=[])  # No episodes = not finished
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_type": "season",
+                        "media_index": 3,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    }
+                ]
+            if rating_key == "12345":
+                return []
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -373,7 +462,20 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=False)
-        mock_get_children = MagicMock(return_value=[])
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_type": "season",
+                        "media_index": 3,
+                    }
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -402,7 +504,21 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=False)
-        mock_get_children = MagicMock(return_value=[])
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_type": "season",
+                        "media_index": 3,
+                        "added_at": "invalid_timestamp",
+                    }
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -432,15 +548,27 @@ class TestGetNewFinishedSeasons:
         )
         mock_is_new_show = MagicMock(return_value=False)
 
-        # Mix of episodes and non-episodes
-        mock_get_children = MagicMock(
-            return_value=[
-                {"media_type": "episode", "title": "Ep 1"},
-                {"media_type": "episode", "title": "Ep 2"},
-                {"media_type": "episode", "title": "Ep 3"},
-                {"media_type": "extra", "title": "Bonus"},  # Not an episode
-            ]
-        )
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 3",
+                        "media_type": "season",
+                        "media_index": 3,
+                        "added_at": str(int((datetime.now() - timedelta(days=2)).timestamp())),
+                    }
+                ]
+            if rating_key == "12345":
+                return [
+                    {"media_type": "episode", "title": "Ep 1"},
+                    {"media_type": "episode", "title": "Ep 2"},
+                    {"media_type": "episode", "title": "Ep 3"},
+                    {"media_type": "extra", "title": "Bonus"},  # Not an episode
+                ]
+            return []
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -472,11 +600,23 @@ class TestGetNewFinishedSeasons:
         )
         mock_is_new_show = MagicMock(return_value=True)
 
-        def _get_children_side_effect(rating_key: str) -> list[dict]:
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
             if rating_key == "11111":
                 return [
-                    {"media_type": "season", "rating_key": "s1", "title": "Season 1"},
-                    {"media_type": "season", "rating_key": "s2", "title": "Season 2"},
+                    {
+                        "media_type": "season",
+                        "rating_key": "s1",
+                        "title": "Season 1",
+                        "media_index": 1,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    },
+                    {
+                        "media_type": "season",
+                        "rating_key": "s2",
+                        "title": "Season 2",
+                        "media_index": 2,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    },
                 ]
             if rating_key == "s1":
                 return [{"media_type": "episode"}, {"media_type": "episode"}]
@@ -498,10 +638,10 @@ class TestGetNewFinishedSeasons:
             include_new_shows=True,
         )
 
-        assert len(result) == 1
-        assert result[0]["show"] == "Brand New Show"
-        assert result[0]["season"] == 1
-        assert result[0]["season_title"] == "Season 1"
+        assert len(result) == 2
+        assert {season["rating_key"] for season in result} == {"s1", "s2"}
+        assert {season["season"] for season in result} == {1, 2}
+        assert {season["season_title"] for season in result} == {"Season 1", "Season 2"}
 
     def test_skips_new_show_when_not_all_seasons_complete(self):
         now = datetime.now()
@@ -521,11 +661,23 @@ class TestGetNewFinishedSeasons:
         )
         mock_is_new_show = MagicMock(return_value=True)
 
-        def _get_children_side_effect(rating_key: str) -> list[dict]:
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
             if rating_key == "11111":
                 return [
-                    {"media_type": "season", "rating_key": "s1", "title": "Season 1"},
-                    {"media_type": "season", "rating_key": "s2", "title": "Season 2"},
+                    {
+                        "media_type": "season",
+                        "rating_key": "s1",
+                        "title": "Season 1",
+                        "media_index": 1,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    },
+                    {
+                        "media_type": "season",
+                        "rating_key": "s2",
+                        "title": "Season 2",
+                        "media_index": 2,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    },
                 ]
             if rating_key == "s1":
                 return [{"media_type": "episode"}]
@@ -564,7 +716,21 @@ class TestGetNewFinishedSeasons:
             ]
         )
         mock_is_new_show = MagicMock(return_value=True)
-        mock_get_children = MagicMock(return_value=[{"media_type": "episode"}])
+
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
+            if rating_key == "11111":
+                return [
+                    {
+                        "rating_key": "12345",
+                        "title": "Season 1",
+                        "media_type": "season",
+                        "media_index": 1,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    }
+                ]
+            return [{"media_type": "episode"}]
+
+        mock_get_children = MagicMock(side_effect=_get_children_side_effect)
         mock_get_cover = MagicMock(return_value=None)
 
         result = get_new_finished_seasons(
@@ -605,11 +771,23 @@ class TestGetNewFinishedSeasons:
         )
         mock_is_new_show = MagicMock(return_value=True)
 
-        def _get_children_side_effect(rating_key: str) -> list[dict]:
+        def _get_children_side_effect(rating_key: str) -> list[dict[str, object]]:
             if rating_key == "11111":
                 return [
-                    {"media_type": "season", "rating_key": "s1", "title": "Season 1"},
-                    {"media_type": "season", "rating_key": "s2", "title": "Season 2"},
+                    {
+                        "media_type": "season",
+                        "rating_key": "s1",
+                        "title": "Season 1",
+                        "media_index": 1,
+                        "added_at": str(int((now - timedelta(days=2)).timestamp())),
+                    },
+                    {
+                        "media_type": "season",
+                        "rating_key": "s2",
+                        "title": "Season 2",
+                        "media_index": 2,
+                        "added_at": str(int((now - timedelta(days=1)).timestamp())),
+                    },
                 ]
             if rating_key == "s1":
                 return [{"media_type": "episode"}]
@@ -633,6 +811,7 @@ class TestGetNewFinishedSeasons:
 
         assert len(result) == 2
         assert {season["season"] for season in result} == {1, 2}
+        assert {season["rating_key"] for season in result} == {"s1", "s2"}
         show_key_calls = [call_args.args[0] for call_args in mock_get_children.call_args_list]
         assert show_key_calls.count("11111") == 1
 

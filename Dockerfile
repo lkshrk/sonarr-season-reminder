@@ -2,7 +2,7 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-ARG VERSION
+ARG VERSION=0.0.0
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}
 
 # Install build dependencies
