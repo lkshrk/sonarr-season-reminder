@@ -88,7 +88,6 @@ def custom_config():
 def mock_sonarr_series_response():
     """Mock Sonarr /api/v3/series response."""
     now = datetime.now(tz=None)
-    recent_ts = (now - timedelta(days=1)).isoformat()
     old_ts = (now - timedelta(days=30)).isoformat()
 
     return [

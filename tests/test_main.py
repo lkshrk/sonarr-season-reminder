@@ -13,7 +13,6 @@ from new_seasons_reminder.main import get_webhook_provider, main, send_webhook
 from new_seasons_reminder.providers.generic import GenericProvider
 from new_seasons_reminder.providers.signal_cli import SignalCliProvider
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

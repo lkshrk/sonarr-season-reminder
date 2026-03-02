@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 
@@ -65,7 +65,7 @@ class SonarrMediaSource(MediaSource):
         """
         # Normalize since to UTC if naive to avoid TypeError in comparisons
         if since.tzinfo is None:
-            since = since.replace(tzinfo=timezone.utc)
+            since = since.replace(tzinfo=UTC)
             logger.debug("Normalized naive since to UTC: %s", since)
 
         logger.debug("Getting candidate seasons since %s", since)

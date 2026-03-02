@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime, timedelta
 from email.message import Message
-from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
+from unittest.mock import MagicMock
+from urllib.error import HTTPError
 
 from new_seasons_reminder.models import SeasonRef
 from new_seasons_reminder.sources.sonarr import SonarrMediaSource
-
 
 # ---------------------------------------------------------------------------
 # Helpers

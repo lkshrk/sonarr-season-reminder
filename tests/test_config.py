@@ -10,7 +10,6 @@ import pytest
 from new_seasons_reminder.config import Config, setup_logging
 from new_seasons_reminder.sources.sonarr import SonarrMediaSource
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@
 
 import logging
 from collections import defaultdict
-from datetime import datetime
 from typing import Any
 
 from .base import WebhookProvider
