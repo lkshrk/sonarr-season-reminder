@@ -1,10 +1,10 @@
-"""Tautulli New Seasons Reminder package exports."""
+"""New Seasons Reminder package exports."""
 
 from collections.abc import Mapping
 from typing import Any
 
 from .config import Config
-from .logic import get_completed_seasons, is_new_show, validate_season_completion
+from .logic import get_completed_seasons, is_new_show
 from .providers import GenericProvider, SignalCliProvider, WebhookProvider
 
 
@@ -56,5 +56,4 @@ __all__ = [
     "GenericProvider",
     "get_completed_seasons",
     "is_new_show",
-    "validate_season_completion",
 ]

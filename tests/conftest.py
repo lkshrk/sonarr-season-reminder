@@ -85,77 +85,95 @@ def custom_config():
 
 
 @pytest.fixture
-def mock_tautulli_response():
-    """Mock Tautulli API response."""
-    return {
-        "response": {
-            "result": "success",
-            "data": [
-                {
-                    "rating_key": "12345",
-                    "title": "Season 3",
-                    "parent_title": "Breaking Bad",
-                    "parent_rating_key": "11111",
-                    "media_type": "season",
-                    "media_index": 3,
-                    "added_at": str(int((datetime.now() - timedelta(days=2)).timestamp())),
-                },
-                {
-                    "rating_key": "67890",
-                    "title": "Season 2",
-                    "parent_title": "The Office",
-                    "parent_rating_key": "22222",
-                    "media_type": "season",
-                    "media_index": 2,
-                    "added_at": str(int((datetime.now() - timedelta(days=1)).timestamp())),
-                },
-            ],
-        }
-    }
+def mock_sonarr_series_response():
+    """Mock Sonarr /api/v3/series response."""
+    now = datetime.now(tz=None)
+    recent_ts = (now - timedelta(days=1)).isoformat()
+    old_ts = (now - timedelta(days=30)).isoformat()
 
-
-@pytest.fixture
-def mock_show_metadata():
-    """Mock show metadata from Tautulli."""
-    return {
-        "rating_key": "11111",
-        "title": "Breaking Bad",
-        "added_at": str(int((datetime.now() - timedelta(days=365)).timestamp())),
-    }
-
-
-@pytest.fixture
-def mock_seasons_data():
-    """Mock seasons children data."""
     return [
         {
-            "rating_key": "11111_s1",
-            "title": "Season 1",
-            "index": 1,
-            "added_at": str(int((datetime.now() - timedelta(days=365)).timestamp())),
+            "id": 1,
+            "title": "Breaking Bad",
+            "tvdbId": 81189,
+            "tmdbId": 1396,
+            "imdbId": "tt0903747",
+            "added": old_ts,
+            "seasons": [
+                {
+                    "seasonNumber": 1,
+                    "monitored": True,
+                    "statistics": {
+                        "episodeFileCount": 7,
+                        "episodeCount": 7,
+                        "totalEpisodeCount": 7,
+                        "percentOfEpisodes": 100.0,
+                    },
+                },
+                {
+                    "seasonNumber": 2,
+                    "monitored": True,
+                    "statistics": {
+                        "episodeFileCount": 13,
+                        "episodeCount": 13,
+                        "totalEpisodeCount": 13,
+                        "percentOfEpisodes": 100.0,
+                    },
+                },
+            ],
         },
         {
-            "rating_key": "11111_s2",
-            "title": "Season 2",
-            "index": 2,
-            "added_at": str(int((datetime.now() - timedelta(days=200)).timestamp())),
-        },
-        {
-            "rating_key": "12345",
-            "title": "Season 3",
-            "index": 3,
-            "added_at": str(int((datetime.now() - timedelta(days=2)).timestamp())),
+            "id": 2,
+            "title": "Incomplete Show",
+            "tvdbId": 12345,
+            "added": old_ts,
+            "seasons": [
+                {
+                    "seasonNumber": 1,
+                    "monitored": True,
+                    "statistics": {
+                        "episodeFileCount": 5,
+                        "episodeCount": 10,  # Not complete
+                        "totalEpisodeCount": 10,
+                        "percentOfEpisodes": 50.0,
+                    },
+                },
+            ],
         },
     ]
 
 
 @pytest.fixture
-def mock_episodes_data():
-    """Mock episodes children data."""
+def mock_sonarr_episodes_response():
+    """Mock Sonarr /api/v3/episode response."""
+    now = datetime.now(tz=None)
+    recent_ts = (now - timedelta(days=1)).isoformat()
+
     return [
-        {"rating_key": "ep1", "media_type": "episode", "title": "Episode 1"},
-        {"rating_key": "ep2", "media_type": "episode", "title": "Episode 2"},
-        {"rating_key": "ep3", "media_type": "episode", "title": "Episode 3"},
+        {
+            "id": 101,
+            "seriesId": 1,
+            "seasonNumber": 1,
+            "episodeNumber": 1,
+            "title": "Pilot",
+            "hasFile": True,
+            "episodeFile": {
+                "id": 1001,
+                "dateAdded": recent_ts,
+            },
+        },
+        {
+            "id": 102,
+            "seriesId": 1,
+            "seasonNumber": 1,
+            "episodeNumber": 2,
+            "title": "Episode 2",
+            "hasFile": True,
+            "episodeFile": {
+                "id": 1002,
+                "dateAdded": recent_ts,
+            },
+        },
     ]
 
 
@@ -166,8 +184,8 @@ def mock_episodes_data():
 def set_env_vars():
     """Set required environment variables for tests."""
     env_vars = {
-        "TAUTULLI_URL": "http://localhost:8181",
-        "TAUTULLI_APIKEY": "test-api-key",
+        "SONARR_URL": "http://localhost:8989",
+        "SONARR_APIKEY": "test-api-key",
         "WEBHOOK_URL": "http://example.com/webhook",
     }
 

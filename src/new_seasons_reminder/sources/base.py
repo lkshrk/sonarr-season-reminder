@@ -7,12 +7,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from new_seasons_reminder.models import CandidateSeason, ExternalIds, SeasonRef
+from new_seasons_reminder.models import CandidateSeason, SeasonRef
 
 
 @runtime_checkable
 class MediaSource(Protocol):
-    """Protocol for media sources (Tautulli, Jellyfin)."""
+    """Protocol for media sources (Sonarr)."""
 
     @abstractmethod
     def get_candidate_seasons(
@@ -48,18 +48,4 @@ class MediaSource(Protocol):
 
         Returns:
             Datetime when show was added, or None if unknown
-        """
-
-    @abstractmethod
-    def get_provider_ids(
-        self,
-        series_id: str,
-    ) -> ExternalIds:
-        """Get external provider IDs for a show.
-
-        Args:
-            series_id: Source-native series ID
-
-        Returns:
-            ExternalIds with tmdb/tvdb/imdb IDs
         """

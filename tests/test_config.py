@@ -8,10 +8,8 @@ from unittest.mock import patch
 import pytest
 
 from new_seasons_reminder.config import Config, setup_logging
-from new_seasons_reminder.metadata.tmdb import TMDBMetadataProvider
-from new_seasons_reminder.metadata.tvdb import TVDBMetadataProvider
-from new_seasons_reminder.sources.jellyfin import JellyfinMediaSource
-from new_seasons_reminder.sources.tautulli import TautulliMediaSource
+from new_seasons_reminder.sources.sonarr import SonarrMediaSource
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -19,11 +17,10 @@ from new_seasons_reminder.sources.tautulli import TautulliMediaSource
 
 
 def _env(**overrides: str):
-    """Return a minimal valid env dict for Tautulli source."""
+    """Return a minimal valid env dict for Sonarr source."""
     base = {
-        "SOURCE_TYPE": "tautulli",
-        "TAUTULLI_URL": "http://tautulli:8181",
-        "TAUTULLI_APIKEY": "tautulli-key",
+        "SONARR_URL": "http://sonarr:8989",
+        "SONARR_APIKEY": "sonarr-key",
         "WEBHOOK_URL": "http://example.com/hook",
     }
     base.update(overrides)
@@ -36,11 +33,6 @@ def _env(**overrides: str):
 
 
 class TestConfigFromEnvDefaults:
-    def test_source_type_defaults_to_tautulli(self):
-        with patch.dict(os.environ, _env(), clear=True):
-            cfg = Config.from_env()
-        assert cfg.source_type == "tautulli"
-
     def test_lookback_days_defaults_to_7(self):
         with patch.dict(os.environ, _env(), clear=True):
             cfg = Config.from_env()
@@ -56,11 +48,6 @@ class TestConfigFromEnvDefaults:
             cfg = Config.from_env()
         assert cfg.include_new_shows is False
 
-    def test_require_fully_aired_defaults_to_false(self):
-        with patch.dict(os.environ, _env(), clear=True):
-            cfg = Config.from_env()
-        assert cfg.require_fully_aired is False
-
     def test_webhook_on_empty_defaults_to_false(self):
         with patch.dict(os.environ, _env(), clear=True):
             cfg = Config.from_env()
@@ -70,11 +57,6 @@ class TestConfigFromEnvDefaults:
         with patch.dict(os.environ, _env(), clear=True):
             cfg = Config.from_env()
         assert cfg.webhook_mode == "default"
-
-    def test_metadata_providers_defaults_to_empty(self):
-        with patch.dict(os.environ, _env(), clear=True):
-            cfg = Config.from_env()
-        assert cfg.metadata_providers == ()
 
     def test_disable_ssl_verify_defaults_to_false(self):
         with patch.dict(os.environ, _env(), clear=True):
@@ -88,15 +70,15 @@ class TestConfigFromEnvDefaults:
 
 
 class TestConfigFromEnvExplicit:
-    def test_reads_tautulli_url(self):
-        with patch.dict(os.environ, _env(TAUTULLI_URL="http://custom:9000"), clear=True):
+    def test_reads_sonarr_url(self):
+        with patch.dict(os.environ, _env(SONARR_URL="http://custom:9000"), clear=True):
             cfg = Config.from_env()
-        assert cfg.tautulli_url == "http://custom:9000"
+        assert cfg.sonarr_url == "http://custom:9000"
 
-    def test_reads_tautulli_apikey(self):
-        with patch.dict(os.environ, _env(TAUTULLI_APIKEY="secret123"), clear=True):
+    def test_reads_sonarr_apikey(self):
+        with patch.dict(os.environ, _env(SONARR_APIKEY="secret123"), clear=True):
             cfg = Config.from_env()
-        assert cfg.tautulli_apikey == "secret123"
+        assert cfg.sonarr_apikey == "secret123"
 
     def test_reads_lookback_days(self):
         with patch.dict(os.environ, _env(LOOKBACK_DAYS="14"), clear=True):
@@ -113,59 +95,25 @@ class TestConfigFromEnvExplicit:
             cfg = Config.from_env()
         assert cfg.include_new_shows is True
 
-    def test_reads_require_fully_aired_true(self):
-        with patch.dict(os.environ, _env(REQUIRE_FULLY_AIRED="true"), clear=True):
-            cfg = Config.from_env()
-        assert cfg.require_fully_aired is True
-
     def test_reads_webhook_on_empty_true(self):
         with patch.dict(os.environ, _env(WEBHOOK_ON_EMPTY="true"), clear=True):
             cfg = Config.from_env()
         assert cfg.webhook_on_empty is True
-
-    def test_reads_metadata_providers_tmdb(self):
-        with patch.dict(os.environ, _env(METADATA_PROVIDERS="tmdb", TMDB_APIKEY="t"), clear=True):
-            cfg = Config.from_env()
-        assert "tmdb" in cfg.metadata_providers
-
-    def test_reads_metadata_providers_multiple(self):
-        with patch.dict(
-            os.environ,
-            _env(METADATA_PROVIDERS="tmdb,tvdb", TMDB_APIKEY="t", TVDB_APIKEY="v"),
-            clear=True,
-        ):
-            cfg = Config.from_env()
-        assert cfg.metadata_providers == ("tmdb", "tvdb")
-
-    def test_reads_tmdb_apikey(self):
-        with patch.dict(os.environ, _env(TMDB_APIKEY="tmdb-secret"), clear=True):
-            cfg = Config.from_env()
-        assert cfg.tmdb_apikey == "tmdb-secret"
-
-    def test_reads_tvdb_apikey(self):
-        with patch.dict(os.environ, _env(TVDB_APIKEY="tvdb-secret"), clear=True):
-            cfg = Config.from_env()
-        assert cfg.tvdb_apikey == "tvdb-secret"
 
     def test_reads_disable_ssl_verify_true(self):
         with patch.dict(os.environ, _env(DISABLE_SSL_VERIFY="true"), clear=True):
             cfg = Config.from_env()
         assert cfg.disable_ssl_verify is True
 
-    def test_jellyfin_source_type(self):
-        env = {
-            "SOURCE_TYPE": "jellyfin",
-            "JELLYFIN_URL": "http://jellyfin:8096",
-            "JELLYFIN_APIKEY": "jf-key",
-            "JELLYFIN_USER_ID": "user-42",
-            "WEBHOOK_URL": "http://example.com/hook",
-        }
-        with patch.dict(os.environ, env, clear=True):
+    def test_reads_webhook_mode(self):
+        with patch.dict(os.environ, _env(WEBHOOK_MODE="signal-cli"), clear=True):
             cfg = Config.from_env()
-        assert cfg.source_type == "jellyfin"
-        assert cfg.jellyfin_url == "http://jellyfin:8096"
-        assert cfg.jellyfin_apikey == "jf-key"
-        assert cfg.jellyfin_user_id == "user-42"
+        assert cfg.webhook_mode == "signal-cli"
+
+    def test_reads_webhook_message_template(self):
+        with patch.dict(os.environ, _env(WEBHOOK_MESSAGE_TEMPLATE="Custom message"), clear=True):
+            cfg = Config.from_env()
+        assert cfg.webhook_message_template == "Custom message"
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +122,6 @@ class TestConfigFromEnvExplicit:
 
 
 class TestConfigFromEnvEdgeCases:
-    def test_invalid_source_type_raises(self):
-        with (
-            patch.dict(os.environ, _env(SOURCE_TYPE="plex"), clear=True),
-            pytest.raises(ValueError, match="SOURCE_TYPE"),
-        ):
-            Config.from_env()
-
     def test_lookback_days_too_low_falls_back_to_7(self):
         with patch.dict(os.environ, _env(LOOKBACK_DAYS="0"), clear=True):
             cfg = Config.from_env()
@@ -208,85 +149,31 @@ class TestConfigFromEnvEdgeCases:
 
 
 class TestConfigValidate:
-    def test_valid_tautulli_config_passes(self):
+    def test_valid_sonarr_config_passes(self):
         cfg = Config(
-            source_type="tautulli",
-            tautulli_url="http://tautulli:8181",
-            tautulli_apikey="key",
+            sonarr_url="http://sonarr:8989",
+            sonarr_apikey="key",
             webhook_url="http://example.com/hook",
         )
         cfg.validate()  # should not raise
 
-    def test_missing_tautulli_url_raises(self):
-        cfg = Config(source_type="tautulli", tautulli_url="", webhook_url="http://x.com")
-        with pytest.raises(ValueError, match="Tautulli URL"):
+    def test_missing_sonarr_url_raises(self):
+        cfg = Config(sonarr_url="", sonarr_apikey="key", webhook_url="http://x.com")
+        with pytest.raises(ValueError, match="SONARR_URL"):
+            cfg.validate()
+
+    def test_missing_sonarr_apikey_raises(self):
+        cfg = Config(sonarr_url="http://sonarr", sonarr_apikey="", webhook_url="http://x.com")
+        with pytest.raises(ValueError, match="SONARR_APIKEY"):
             cfg.validate()
 
     def test_missing_webhook_url_raises(self):
         cfg = Config(
-            source_type="tautulli",
-            tautulli_url="http://tautulli",
-            tautulli_apikey="k",
+            sonarr_url="http://sonarr",
+            sonarr_apikey="key",
             webhook_url="",
         )
         with pytest.raises(ValueError, match="WEBHOOK_URL"):
-            cfg.validate()
-
-    def test_jellyfin_missing_url_raises(self):
-        cfg = Config(
-            source_type="jellyfin",
-            jellyfin_url="",
-            jellyfin_apikey="key",
-            jellyfin_user_id="uid",
-            webhook_url="http://x.com",
-        )
-        with pytest.raises(ValueError, match="Jellyfin URL"):
-            cfg.validate()
-
-    def test_jellyfin_missing_apikey_raises(self):
-        cfg = Config(
-            source_type="jellyfin",
-            jellyfin_url="http://jf",
-            jellyfin_apikey="",
-            jellyfin_user_id="uid",
-            webhook_url="http://x.com",
-        )
-        with pytest.raises(ValueError, match="API key"):
-            cfg.validate()
-
-    def test_jellyfin_missing_user_id_raises(self):
-        cfg = Config(
-            source_type="jellyfin",
-            jellyfin_url="http://jf",
-            jellyfin_apikey="key",
-            jellyfin_user_id="",
-            webhook_url="http://x.com",
-        )
-        with pytest.raises(ValueError, match="user ID"):
-            cfg.validate()
-
-    def test_tmdb_missing_apikey_raises(self):
-        cfg = Config(
-            source_type="tautulli",
-            tautulli_url="http://t",
-            tautulli_apikey="k",
-            webhook_url="http://x.com",
-            metadata_providers=("tmdb",),
-            tmdb_apikey="",
-        )
-        with pytest.raises(ValueError, match="TMDB_APIKEY"):
-            cfg.validate()
-
-    def test_tvdb_missing_apikey_raises(self):
-        cfg = Config(
-            source_type="tautulli",
-            tautulli_url="http://t",
-            tautulli_apikey="k",
-            webhook_url="http://x.com",
-            metadata_providers=("tvdb",),
-            tvdb_apikey="",
-        )
-        with pytest.raises(ValueError, match="TVDB_APIKEY"):
             cfg.validate()
 
 
@@ -296,43 +183,22 @@ class TestConfigValidate:
 
 
 class TestCreateMediaSource:
-    def test_creates_tautulli_source(self):
+    def test_creates_sonarr_source(self):
         cfg = Config(
-            source_type="tautulli",
-            tautulli_url="http://tautulli:8181",
-            tautulli_apikey="key",
+            sonarr_url="http://sonarr:8989",
+            sonarr_apikey="key",
         )
         source = cfg.create_media_source()
-        assert isinstance(source, TautulliMediaSource)
+        assert isinstance(source, SonarrMediaSource)
 
-    def test_creates_jellyfin_source(self):
-        cfg = Config(
-            source_type="jellyfin",
-            jellyfin_url="http://jellyfin:8096",
-            jellyfin_apikey="key",
-            jellyfin_user_id="uid",
-        )
-        source = cfg.create_media_source()
-        assert isinstance(source, JellyfinMediaSource)
-
-    def test_tautulli_missing_url_raises(self):
-        cfg = Config(source_type="tautulli", tautulli_url="", tautulli_apikey="key")
+    def test_sonarr_missing_url_raises(self):
+        cfg = Config(sonarr_url="", sonarr_apikey="key")
         with pytest.raises(ValueError):
             cfg.create_media_source()
 
-    def test_jellyfin_missing_user_id_raises(self):
-        cfg = Config(
-            source_type="jellyfin",
-            jellyfin_url="http://jf",
-            jellyfin_apikey="key",
-            jellyfin_user_id="",
-        )
+    def test_sonarr_missing_apikey_raises(self):
+        cfg = Config(sonarr_url="http://sonarr", sonarr_apikey="")
         with pytest.raises(ValueError):
-            cfg.create_media_source()
-
-    def test_unknown_source_type_raises(self):
-        cfg = Config(source_type="plex")
-        with pytest.raises(ValueError, match="Unknown source type"):
             cfg.create_media_source()
 
     def test_create_http_client_disables_ssl_verification(self):
@@ -340,61 +206,15 @@ class TestCreateMediaSource:
         client = cfg.create_http_client()
         assert client.verify_ssl is False
 
-    def test_tautulli_source_uses_ssl_setting_in_http_client(self):
+    def test_sonarr_source_uses_ssl_setting_in_http_client(self):
         cfg = Config(
-            source_type="tautulli",
-            tautulli_url="http://tautulli:8181",
-            tautulli_apikey="key",
+            sonarr_url="http://sonarr:8989",
+            sonarr_apikey="key",
             disable_ssl_verify=True,
         )
         source = cfg.create_media_source()
-        assert isinstance(source, TautulliMediaSource)
+        assert isinstance(source, SonarrMediaSource)
         assert source._http_client.verify_ssl is False
-
-
-# ---------------------------------------------------------------------------
-# Config.create_metadata_providers
-# ---------------------------------------------------------------------------
-
-
-class TestCreateMetadataProviders:
-    def test_empty_providers_returns_empty_list(self):
-        cfg = Config()
-        providers = cfg.create_metadata_providers()
-        assert providers == []
-
-    def test_tmdb_provider_created(self):
-        cfg = Config(metadata_providers=("tmdb",), tmdb_apikey="tmdb-key")
-        providers = cfg.create_metadata_providers()
-        assert len(providers) == 1
-        assert isinstance(providers[0], TMDBMetadataProvider)
-
-    def test_tvdb_provider_created(self):
-        cfg = Config(metadata_providers=("tvdb",), tvdb_apikey="tvdb-key")
-        providers = cfg.create_metadata_providers()
-        assert len(providers) == 1
-        assert isinstance(providers[0], TVDBMetadataProvider)
-
-    def test_both_providers_created_in_order(self):
-        cfg = Config(
-            metadata_providers=("tmdb", "tvdb"),
-            tmdb_apikey="tmdb-key",
-            tvdb_apikey="tvdb-key",
-        )
-        providers = cfg.create_metadata_providers()
-        assert len(providers) == 2
-        assert isinstance(providers[0], TMDBMetadataProvider)
-        assert isinstance(providers[1], TVDBMetadataProvider)
-
-    def test_tmdb_skipped_if_no_apikey(self):
-        cfg = Config(metadata_providers=("tmdb",), tmdb_apikey="")
-        providers = cfg.create_metadata_providers()
-        assert providers == []
-
-    def test_tvdb_skipped_if_no_apikey(self):
-        cfg = Config(metadata_providers=("tvdb",), tvdb_apikey="")
-        providers = cfg.create_metadata_providers()
-        assert providers == []
 
 
 # ---------------------------------------------------------------------------

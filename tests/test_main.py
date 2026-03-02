@@ -13,16 +13,16 @@ from new_seasons_reminder.main import get_webhook_provider, main, send_webhook
 from new_seasons_reminder.providers.generic import GenericProvider
 from new_seasons_reminder.providers.signal_cli import SignalCliProvider
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _tautulli_config(**kwargs) -> Config:
+def _sonarr_config(**kwargs) -> Config:
     base = Config(
-        source_type="tautulli",
-        tautulli_url="http://tautulli:8181",
-        tautulli_apikey="key",
+        sonarr_url="http://sonarr:8989",
+        sonarr_apikey="key",
         webhook_url="http://example.com/hook",
         webhook_mode="default",
     )
@@ -40,7 +40,7 @@ def _make_seasons():
             "added_at": "2026-01-28T10:30:00",
             "episode_count": 13,
             "rating_key": "12345",
-            "reason": "Complete: 13/13 episodes",
+            "reason": "Complete: 13 episodes",
             "expected_count": 13,
         }
     ]
@@ -53,17 +53,17 @@ def _make_seasons():
 
 class TestGetWebhookProvider:
     def test_returns_generic_provider_for_default_mode(self):
-        cfg = _tautulli_config(webhook_mode="default")
+        cfg = _sonarr_config(webhook_mode="default")
         provider = get_webhook_provider(cfg)
         assert isinstance(provider, GenericProvider)
 
     def test_returns_generic_provider_for_custom_mode(self):
-        cfg = _tautulli_config(webhook_mode="custom")
+        cfg = _sonarr_config(webhook_mode="custom")
         provider = get_webhook_provider(cfg)
         assert isinstance(provider, GenericProvider)
 
     def test_returns_signal_cli_provider(self):
-        cfg = _tautulli_config(
+        cfg = _sonarr_config(
             webhook_mode="signal-cli",
             webhook_url="http://signal-cli:8080/v2/send",
             signal_number="+1234567890",
@@ -73,14 +73,14 @@ class TestGetWebhookProvider:
         assert isinstance(provider, SignalCliProvider)
 
     def test_unsupported_mode_raises_value_error(self):
-        cfg = _tautulli_config(webhook_mode="unsupported")
+        cfg = _sonarr_config(webhook_mode="unsupported")
         with pytest.raises(ValueError, match="Unsupported webhook_mode"):
             get_webhook_provider(cfg)
 
     def test_empty_webhook_url_does_not_raise_at_get_provider(self):
         # GenericProvider.validate_config() always returns True; empty URL fails at send time.
         # get_webhook_provider itself should succeed (url validated later).
-        cfg = _tautulli_config(webhook_mode="default", webhook_url="")
+        cfg = _sonarr_config(webhook_mode="default", webhook_url="")
         # Should NOT raise — validation is lazy
         provider = get_webhook_provider(cfg)
         assert isinstance(provider, GenericProvider)
@@ -100,7 +100,7 @@ class TestSendWebhook:
         return provider
 
     def test_returns_true_on_success(self):
-        cfg = _tautulli_config()
+        cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
 
@@ -111,14 +111,14 @@ class TestSendWebhook:
         assert result is True
 
     def test_returns_true_on_no_seasons_when_send_on_empty_false(self):
-        cfg = _tautulli_config()
+        cfg = _sonarr_config()
         provider = self._make_provider(should_send_empty=False)
 
         result = send_webhook([], provider, cfg)
         assert result is True
 
     def test_sends_webhook_when_send_on_empty_true(self):
-        cfg = _tautulli_config()
+        cfg = _sonarr_config()
         provider = self._make_provider(should_send_empty=True)
 
         with patch("new_seasons_reminder.main._http_client") as mock_http:
@@ -129,14 +129,14 @@ class TestSendWebhook:
         mock_http.post_json.assert_called_once()
 
     def test_returns_false_when_no_webhook_url(self):
-        cfg = _tautulli_config(webhook_url="")
+        cfg = _sonarr_config(webhook_url="")
         provider = self._make_provider(should_send_empty=True)
 
         result = send_webhook([], provider, cfg)
         assert result is False
 
     def test_returns_false_on_http_error(self):
-        cfg = _tautulli_config()
+        cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
 
@@ -149,7 +149,7 @@ class TestSendWebhook:
         assert result is False
 
     def test_returns_false_on_url_error(self):
-        cfg = _tautulli_config()
+        cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
 
@@ -160,7 +160,7 @@ class TestSendWebhook:
         assert result is False
 
     def test_returns_false_on_unexpected_error(self):
-        cfg = _tautulli_config()
+        cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
 
@@ -178,9 +178,8 @@ class TestSendWebhook:
 
 def _minimal_env(**overrides):
     base = {
-        "SOURCE_TYPE": "tautulli",
-        "TAUTULLI_URL": "http://tautulli:8181",
-        "TAUTULLI_APIKEY": "key",
+        "SONARR_URL": "http://sonarr:8989",
+        "SONARR_APIKEY": "key",
         "WEBHOOK_URL": "http://example.com/hook",
     }
     base.update(overrides)
@@ -196,9 +195,8 @@ class TestMain:
             patch("new_seasons_reminder.main.get_completed_seasons") as mock_seasons,
         ):
             cfg = Config(
-                source_type="tautulli",
-                tautulli_url="http://t:8181",
-                tautulli_apikey="k",
+                sonarr_url="http://sonarr:8989",
+                sonarr_apikey="key",
                 webhook_url="http://example.com/hook",
             )
             mock_cfg.return_value = cfg
@@ -219,9 +217,8 @@ class TestMain:
     def test_main_returns_1_on_invalid_webhook_config(self):
         with patch("new_seasons_reminder.main.Config.from_env") as mock_cfg:
             cfg = Config(
-                source_type="tautulli",
-                tautulli_url="http://t:8181",
-                tautulli_apikey="k",
+                sonarr_url="http://sonarr:8989",
+                sonarr_apikey="key",
                 webhook_url="http://example.com/hook",
             )
             mock_cfg.return_value = cfg
@@ -230,35 +227,11 @@ class TestMain:
                 result = main()
         assert result == 1
 
-    def test_main_returns_0_when_webhook_url_not_set(self):
-        """When no WEBHOOK_URL, should print seasons and return 0."""
-        with patch("new_seasons_reminder.main.Config.from_env") as mock_cfg:
-            cfg = Config(
-                source_type="tautulli",
-                tautulli_url="http://t:8181",
-                tautulli_apikey="k",
-                webhook_url="",
-                webhook_mode="default",
-            )
-            mock_cfg.return_value = cfg
-            with patch("new_seasons_reminder.main.get_webhook_provider") as mock_provider:
-                provider = MagicMock()
-                provider.validate_config.return_value = True
-                mock_provider.return_value = provider
-                with patch("new_seasons_reminder.main.get_completed_seasons") as mock_seasons:
-                    mock_seasons.return_value = []
-                    with patch("new_seasons_reminder.main.get_webhook_provider") as mock_gwp:
-                        mock_gwp.side_effect = ValueError("no webhook url")
-                        result = main()
-
-        assert result == 1
-
     def test_main_returns_1_on_webhook_send_failure(self):
         with patch("new_seasons_reminder.main.Config.from_env") as mock_cfg:
             cfg = Config(
-                source_type="tautulli",
-                tautulli_url="http://t:8181",
-                tautulli_apikey="k",
+                sonarr_url="http://sonarr:8989",
+                sonarr_apikey="key",
                 webhook_url="http://example.com/hook",
             )
             mock_cfg.return_value = cfg
@@ -276,9 +249,8 @@ class TestMain:
     def test_main_returns_1_on_unexpected_exception(self):
         with patch("new_seasons_reminder.main.Config.from_env") as mock_cfg:
             cfg = Config(
-                source_type="tautulli",
-                tautulli_url="http://t:8181",
-                tautulli_apikey="k",
+                sonarr_url="http://sonarr:8989",
+                sonarr_apikey="key",
                 webhook_url="http://example.com/hook",
             )
             mock_cfg.return_value = cfg

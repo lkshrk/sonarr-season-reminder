@@ -38,7 +38,7 @@ class WebhookProvider:
         """Get HTTP headers for the webhook request."""
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Tautulli-NewSeasons-Reminder/1.0",
+            "User-Agent": "NewSeasons-Reminder/1.0",
         }
         self.logger.debug("Using webhook headers: %s", headers)
         return headers

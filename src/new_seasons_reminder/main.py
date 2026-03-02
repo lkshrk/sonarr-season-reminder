@@ -11,7 +11,6 @@ from urllib.error import HTTPError, URLError
 from .config import Config, setup_logging
 from .http import HTTPClient
 from .logic import get_completed_seasons
-from .metadata.resolver import MetadataResolver
 from .providers import GenericProvider, SignalCliProvider, WebhookProvider
 
 logger = logging.getLogger(__name__)
@@ -131,8 +130,8 @@ def main() -> int:
     logger.debug(
         "Loaded config values: %s",
         {
-            "tautulli_url": config.tautulli_url,
-            "tautulli_apikey": _mask_value(config.tautulli_apikey),
+            "sonarr_url": config.sonarr_url,
+            "sonarr_apikey": _mask_value(config.sonarr_apikey),
             "webhook_url": config.webhook_url,
             "webhook_mode": config.webhook_mode,
             "webhook_message_template": config.webhook_message_template,
@@ -157,20 +156,11 @@ def main() -> int:
         logger.info("Starting season detection...")
         start_time = time.monotonic()
         source = config.create_media_source()
-        providers = config.create_metadata_providers()
-        metadata_provider = None
-        if providers:
-            metadata_provider = MetadataResolver(
-                primary=providers[0],
-                fallback=providers[1] if len(providers) > 1 else None,
-            )
 
         since = datetime.now(tz=UTC) - timedelta(days=config.lookback_days)
         seasons = get_completed_seasons(
             source=source,
-            metadata_provider=metadata_provider,
             since=since,
-            require_fully_aired=config.require_fully_aired,
             include_new_shows=config.include_new_shows,
         )
         elapsed = time.monotonic() - start_time
