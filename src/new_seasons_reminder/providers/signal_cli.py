@@ -117,7 +117,7 @@ class SignalCliProvider(WebhookProvider):
         payload = {
             "message": message,
             "sender": self.config["signal_number"],
-            "recipients": recipients[0] if recipients else "",
+            "recipients": recipients if recipients else [],
         }
 
         logger.info(
