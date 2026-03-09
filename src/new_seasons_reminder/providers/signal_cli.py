@@ -118,6 +118,7 @@ class SignalCliProvider(WebhookProvider):
             "message": message,
             "number": self.config["signal_number"],
             "recipients": recipients if recipients else [],
+            "text_mode": "styled",
         }
 
         logger.info(

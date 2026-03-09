@@ -93,10 +93,12 @@ class TestSignalCliProvider:
             "message",
             "number",
             "recipients",
+            "text_mode",
         ]
         assert payload["number"] == "+1234567890"
         assert payload["recipients"] == ["+0987654321", "+1122334455"]
         assert payload["message"]
+        assert payload["text_mode"] == "styled"
 
     def test_build_payload_seerr_notification_shape(self, signal_config, sample_seasons):
         cfg = {
@@ -109,10 +111,12 @@ class TestSignalCliProvider:
             "message",
             "number",
             "recipients",
+            "text_mode",
         ]
         assert payload["number"] == "+1234567890"
         assert payload["recipients"] == ["+0987654321", "+1122334455"]
         assert payload["message"]
+        assert payload["text_mode"] == "styled"
 
 
 class TestGenericProvider:
