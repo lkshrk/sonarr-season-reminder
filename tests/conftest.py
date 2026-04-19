@@ -45,7 +45,7 @@ def signal_config():
     return {
         "webhook_url": "http://signal-cli:8080/v2/send",
         "webhook_on_empty": False,
-        "message_template": "📺 {season_count} new season(s)",
+        "message_template": "📺 {season_count} new {season_word}",
         "lookback_days": 7,
         "signal_number": "+1234567890",
         "signal_recipients": "+0987654321,+1122334455",

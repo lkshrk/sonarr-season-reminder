@@ -1,0 +1,22 @@
+[
+  "📺 {season_count} {season_word} just landed. You're welcome.",
+  "🎬 Your Sonarr worked harder than you this week — {season_count} {season_word} done.",
+  "🍿 {season_count} {season_word} ready. Cancel your plans.",
+  "📡 {season_count} fresh {season_word} downloaded while you were busy touching grass.",
+  "🏴‍☠️ {season_count} {season_word} acquired. Legally, of course.",
+  "🎉 {season_count} {season_word} completed. Sleep is overrated anyway.",
+  "📺 Breaking news: {season_count} {season_word} dropped and your couch misses you.",
+  "🚀 {season_count} {season_word} in the last {period_days} days. Your hard drive is sweating.",
+  "🎯 {season_count} {season_word} locked and loaded. Fire up the TV.",
+  "👀 {season_count} {season_word} just showed up uninvited. Let them in.",
+  "🔥 Hot off the press: {show_list}. Binge responsibly. Or don't.",
+  "📦 {season_count} {season_word} delivered. No signature required.",
+  "⚡ {season_count} {season_word} materialized. Your watchlist just got longer. Again.",
+  "🛋️ {season_count} {season_word} ready. Productivity was overrated anyway.",
+  "🤖 Your server did the heavy lifting — {show_list}.",
+  "📺 {season_count} {season_word} in {period_days} days. At this rate you'll never catch up.",
+  "🎬 The backlog grows: {show_list}. Resistance is futile.",
+  "🍕 {season_count} {season_word} fresh out of the oven. Grab a slice and press play.",
+  "🏆 Achievement unlocked: {season_count} new {season_word}. Now go watch them.",
+  "📡 Incoming transmission: {show_list}. Your media server doesn't sleep, and neither should you."
+]

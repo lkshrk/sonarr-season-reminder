@@ -52,7 +52,7 @@ class SignalCliProvider(WebhookProvider):
         """Format message with Signal styling.
 
         Format:
-        **📺 New seasons available 🎉**
+        **<random header>**
 
         • *Show Name* - 1, 2, 3 (33 episodes)
         • *Another Show* - 2 (22 episodes)
@@ -66,9 +66,9 @@ class SignalCliProvider(WebhookProvider):
 
         lines = []
 
-        period = self.config.get("lookback_days", 7)
-        season_word = "season" if count == 1 else "seasons"
-        lines.append(f"**📺 {count} new {season_word} completed in the last {period} days 🎉**")
+        # Use the random template system for the header
+        header = super().format_message(seasons)
+        lines.append(f"**{header}**")
         lines.append("")
 
         # Build show lines sorted alphabetically
@@ -77,11 +77,15 @@ class SignalCliProvider(WebhookProvider):
             show_seasons = grouped[show_name]
             season_nums = sorted([self._to_int(s.get("season"), 0) for s in show_seasons])
             total_eps = sum(self._to_int(s.get("episode_count"), 0) for s in show_seasons)
-            season_list = ", ".join(str(n) for n in season_nums)
+            if len(season_nums) == 1:
+                season_list = f"S{season_nums[0]}"
+            else:
+                joined = ", ".join(f"S{n}" for n in season_nums[:-1])
+                season_list = f"{joined} & S{season_nums[-1]}"
             episode_word = "episode" if total_eps == 1 else "episodes"
 
             # Italic show name, season numbers, episode count
-            show_lines.append(f"*{show_name}* - {season_list} ({total_eps} {episode_word})")
+            show_lines.append(f"*{show_name}* — {season_list} ({total_eps} {episode_word})")
 
         # Add show lines with bullet points
         for show_line in show_lines:

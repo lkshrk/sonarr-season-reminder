@@ -30,9 +30,7 @@ class GenericProvider(WebhookProvider):
                 payload_template,
             )
             # Custom template with variable substitution
-            show_list = (
-                ", ".join([f"{s['show']} S{s['season']}" for s in seasons]) if seasons else "None"
-            )
+            show_list = self.format_show_list(seasons)
 
             # Replace template variables
             template_str = payload_template

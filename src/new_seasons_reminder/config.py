@@ -26,7 +26,7 @@ class Config:
     # Webhook settings
     webhook_url: str = ""
     webhook_mode: str = "default"
-    webhook_message_template: str = "📺 {season_count} new season(s) completed this week!"
+    webhook_message_template: str = "📺 {season_count} new {season_word} completed this week!"
     webhook_on_empty: bool = False
     webhook_payload_template: str = "default"
 
@@ -34,6 +34,9 @@ class Config:
     signal_number: str = ""
     signal_recipients: str = ""
     signal_text_mode: str = "styled"
+
+    # Message templates
+    message_templates_file: str = ""
 
     # Application settings
     lookback_days: int = 7
@@ -50,13 +53,14 @@ class Config:
         webhook_mode = os.environ.get("WEBHOOK_MODE", "default")
         webhook_message_template = os.environ.get(
             "WEBHOOK_MESSAGE_TEMPLATE",
-            "📺 {season_count} new season(s) completed this week!",
+            "📺 {season_count} new {season_word} completed this week!",
         )
         webhook_on_empty = os.environ.get("WEBHOOK_ON_EMPTY", "false").lower() == "true"
         webhook_payload_template = os.environ.get("WEBHOOK_PAYLOAD_TEMPLATE", "default")
         signal_number = os.environ.get("SIGNAL_NUMBER", "")
         signal_recipients = os.environ.get("SIGNAL_RECIPIENTS", "")
         signal_text_mode = os.environ.get("SIGNAL_TEXT_MODE", "styled")
+        message_templates_file = os.environ.get("MESSAGE_TEMPLATES_FILE", "")
         lookback_days = cls._get_lookback_days()
         debug = os.environ.get("DEBUG", "false").lower() == "true"
         include_new_shows = os.environ.get("INCLUDE_NEW_SHOWS", "false").lower() == "true"
@@ -73,6 +77,7 @@ class Config:
             signal_number=signal_number,
             signal_recipients=signal_recipients,
             signal_text_mode=signal_text_mode,
+            message_templates_file=message_templates_file,
             lookback_days=lookback_days,
             debug=debug,
             include_new_shows=include_new_shows,
@@ -126,6 +131,7 @@ class Config:
             "signal_number": self.signal_number,
             "signal_recipients": self.signal_recipients,
             "signal_text_mode": self.signal_text_mode,
+            "message_templates_file": self.message_templates_file,
         }
 
     def create_media_source(self) -> SonarrMediaSource:

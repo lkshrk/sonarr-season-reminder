@@ -70,9 +70,7 @@ class HTTPClient:
         # HTTPError inherits URLError → OSError, so check it first
         if isinstance(error, HTTPError):
             return error.code >= 500  # Only server errors
-        if isinstance(error, URLError | TimeoutError | OSError):
-            return True  # Connection errors, timeouts, OS-level failures
-        return False
+        return isinstance(error, URLError | TimeoutError | OSError)
 
     def _request_with_retry(
         self,
