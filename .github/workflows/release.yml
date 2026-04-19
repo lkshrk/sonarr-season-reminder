@@ -1,215 +1,96 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
-    branches:
-      - main
+  schedule:
+    - cron: '0 12 * * 1' # Every Monday at 12:00 UTC
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Skip CI preflight check and release anyway'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
   packages: write
+  attestations: write
+  id-token: write
 
 jobs:
-  check-and-release:
+  release:
+    name: Build, Release & Publish
     runs-on: ubuntu-latest
-    name: Create Release
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-    - name: Check for version tag
-      id: check_tag
-      run: |
-        COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
-        echo "Checking for tags on commit $COMMIT_SHA"
+      - name: Verify latest CI Pipeline on main succeeded
+        if: ${{ !inputs.force }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CONCLUSION=$(gh run list \
+            --workflow "CI Pipeline" \
+            --branch main \
+            --event push \
+            --limit 1 \
+            --json conclusion \
+            --jq '.[0].conclusion')
+          echo "Latest CI Pipeline conclusion on main: ${CONCLUSION:-<none>}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "::error::Latest CI Pipeline run on main is '$CONCLUSION' — refusing to release."
+            exit 1
+          fi
 
-        # Get tags pointing to this commit
-        TAGS=$(git tag -l "v*" --points-at "$COMMIT_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
-        if [ -n "$TAGS" ]; then
-          VERSION=$(echo "$TAGS" | head -1)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "has_tag=true" >> $GITHUB_OUTPUT
-          echo "Found version tag: $VERSION"
-        else
-          echo "has_tag=false" >> $GITHUB_OUTPUT
-          echo "No version tag found"
-        fi
+      - name: Build Docker image (validate Dockerfile before tagging)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:release-candidate
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-    - name: Skip if no tag
-      if: ${{ steps.check_tag.outputs.has_tag != 'true' }}
-      run: |
-        echo "No version tag on this commit. Skipping release."
-        exit 0
+      - name: Semantic Release
+        id: semrel
+        uses: cycjimmy/semantic-release-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Python
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.14'
+      - name: Log in to GHCR
+        if: steps.semrel.outputs.new_release_published == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install uv
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      uses: astral-sh/setup-uv@v5
-      with:
-        enable-cache: true
-        cache-dependency-glob: "**/pyproject.toml"
-
-    - name: Install dependencies
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      run: |
-        uv sync --dev
-
-    - name: Run tests
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      run: |
-        uv run pytest
-
-    - name: Set up Docker Buildx
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to GitHub Container Registry
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Build and push Docker image
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: |
-          ghcr.io/${{ github.repository }}:${{ steps.check_tag.outputs.version }}
-          ghcr.io/${{ github.repository }}:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=${{ steps.check_tag.outputs.version }}
-
-    - name: Create release directory
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      run: |
-        VERSION=${{ steps.check_tag.outputs.version }}
-        mkdir -p release/tautulli-new-seasons-reminder-${VERSION}
-        cp -r src release/tautulli-new-seasons-reminder-${VERSION}/
-        cp README.md release/tautulli-new-seasons-reminder-${VERSION}/
-        cp LICENSE release/tautulli-new-seasons-reminder-${VERSION}/
-        cp .env.example release/tautulli-new-seasons-reminder-${VERSION}/
-        cp pyproject.toml release/tautulli-new-seasons-reminder-${VERSION}/
-
-    - name: Create release archives
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      run: |
-        VERSION=${{ steps.check_tag.outputs.version }}
-        cd release
-        # Versioned archives
-        tar -czf tautulli-new-seasons-reminder-${VERSION}.tar.gz tautulli-new-seasons-reminder-${VERSION}/
-        zip -r tautulli-new-seasons-reminder-${VERSION}.zip tautulli-new-seasons-reminder-${VERSION}/
-        # Non-versioned archives for "latest" URL
-        cp tautulli-new-seasons-reminder-${VERSION}.tar.gz release.tar.gz
-        cp tautulli-new-seasons-reminder-${VERSION}.zip release.zip
-
-    - name: Generate release notes
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      run: |
-        VERSION=${{ steps.check_tag.outputs.version }}
-        cat > release_notes.md << EOF
-        ## Tautulli New Seasons Reminder ${VERSION}
-
-        ### Docker Image (Recommended for Kubernetes)
-
-        Pull and run the Docker image:
-        \`\`\`bash
-        # Pull latest
-        docker pull ghcr.io/${{ github.repository }}:latest
-
-        # Run with environment variables
-        docker run -e TAUTULLI_URL=http://tautulli:8181 \
-                   -e TAUTULLI_APIKEY=your-api-key \
-                   -e WEBHOOK_URL=your-webhook-url \
-                   ghcr.io/${{ github.repository }}:latest
-        \`\`\`
-
-        Images are published to GitHub Container Registry:
-        - `ghcr.io/${{ github.repository }}:${VERSION}`
-        - `ghcr.io/${{ github.repository }}:latest`
-
-        ### Quick Download (Latest)
-
-        Download the latest release:
-        \`\`\`bash
-        # Download latest
-        curl -L -o release.tar.gz https://github.com/${{ github.repository }}/releases/latest/download/release.tar.gz
-
-        # Extract
-        tar -xzf release.tar.gz
-        cd tautulli-new-seasons-reminder-*/
-        \`\`\`
-
-        ### Specific Version
-
-        Download this specific version:
-        \`\`\`bash
-        # Download ${VERSION}
-        curl -L -o release.tar.gz https://github.com/${{ github.repository }}/releases/download/${VERSION}/tautulli-new-seasons-reminder-${VERSION}.tar.gz
-
-        # Extract
-        tar -xzf release.tar.gz
-        cd tautulli-new-seasons-reminder-${VERSION}/
-        \`\`\`
-
-        ### Files Included
-        - \`src/\` - Python source code
-        - \`README.md\` - Documentation
-        - \`LICENSE\` - MIT License
-        - \`.env.example\` - Example configuration
-        - \`pyproject.toml\` - Package configuration
-
-        ### Quick Start
-        1. Set environment variables (see .env.example)
-        2. Run the script: \`python -m new_seasons_reminder\`
-
-        See README.md for full documentation.
-        EOF
-
-    - name: Create GitHub Release
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      uses: softprops/action-gh-release@v2
-      with:
-        name: ${{ steps.check_tag.outputs.version }}
-        tag_name: ${{ steps.check_tag.outputs.version }}
-        body_path: release_notes.md
-        files: |
-          release/tautulli-new-seasons-reminder-*.tar.gz
-          release/tautulli-new-seasons-reminder-*.zip
-          release/release.tar.gz
-          release/release.zip
-        draft: false
-        prerelease: ${{ contains(steps.check_tag.outputs.version, 'alpha') || contains(steps.check_tag.outputs.version, 'beta') || contains(steps.check_tag.outputs.version, 'rc') }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Update latest tag
-      if: ${{ steps.check_tag.outputs.has_tag == 'true' }}
-      run: |
-        git config user.name "GitHub Actions"
-        git config user.email "actions@github.com"
-
-        git tag -d latest 2>/dev/null || true
-        git push origin :refs/tags/latest 2>/dev/null || true
-
-        git tag -a latest -m "Latest release: ${{ steps.check_tag.outputs.version }}"
-        git push origin latest
+      - name: Tag and push versioned image
+        if: steps.semrel.outputs.new_release_published == 'true'
+        env:
+          VERSION: ${{ steps.semrel.outputs.new_release_version }}
+        run: |
+          set -euo pipefail
+          SRC="${REGISTRY}/${IMAGE_NAME}:release-candidate"
+          docker tag "$SRC" "${REGISTRY}/${IMAGE_NAME}:v${VERSION}"
+          docker tag "$SRC" "${REGISTRY}/${IMAGE_NAME}:latest"
+          docker push "${REGISTRY}/${IMAGE_NAME}:v${VERSION}"
+          docker push "${REGISTRY}/${IMAGE_NAME}:latest"
