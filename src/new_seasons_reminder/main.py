@@ -8,57 +8,29 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.error import HTTPError, URLError
 
+# Imported from __init__.py to avoid duplication
+from . import get_webhook_provider
 from .config import Config, setup_logging
 from .http import HTTPClient
 from .logic import get_completed_seasons
-from .providers import GenericProvider, SignalCliProvider, WebhookProvider
+from .providers import WebhookProvider
 
 logger = logging.getLogger(__name__)
 
-# Shared HTTP client for webhooks
-_http_client = HTTPClient()
 
-
-def get_webhook_provider(config: Config) -> WebhookProvider:
-    """Get the appropriate webhook provider based on configuration.
-
-    Args:
-        config: Application configuration.
-
-    Returns:
-        Configured webhook provider instance.
-
-    Raises:
-        ValueError: If configuration is invalid or mode is unsupported.
-    """
-    provider_config = config.get_provider_config()
-    mode = config.webhook_mode.lower()
-
-    provider: WebhookProvider
-    if mode == "signal-cli":
-        provider = SignalCliProvider(provider_config)
-    elif mode == "default" or mode == "custom":
-        provider = GenericProvider(provider_config)
-    else:
-        raise ValueError(f"Unsupported webhook_mode: {config.webhook_mode}")
-
-    logger.info("Selected webhook provider: %s (mode=%s)", provider.__class__.__name__, mode)
-
-    is_valid = provider.validate_config()
-    logger.debug("Provider validation result for %s: %s", mode, is_valid)
-    if not is_valid:
-        raise ValueError(f"Invalid configuration for {mode} provider")
-
-    return provider
-
-
-def send_webhook(seasons: list[dict[str, Any]], provider: WebhookProvider, config: Config) -> bool:
+def send_webhook(
+    seasons: list[dict[str, Any]],
+    provider: WebhookProvider,
+    config: Config,
+    http_client: HTTPClient,
+) -> bool:
     """Send webhook notification with new seasons data.
 
     Args:
         seasons: List of new finished seasons.
         provider: Configured webhook provider.
         config: Application configuration.
+        http_client: HTTP client for sending requests.
 
     Returns:
         True if webhook was sent successfully, False otherwise.
@@ -81,7 +53,7 @@ def send_webhook(seasons: list[dict[str, Any]], provider: WebhookProvider, confi
             len(seasons),
         )
         logger.debug("Webhook payload: %s", payload)
-        _http_client.post_json(config.webhook_url, data=payload, headers=headers)
+        http_client.post_json(config.webhook_url, data=payload, headers=headers)
         logger.info(
             "Webhook sent successfully to %s",
             config.webhook_url,
@@ -118,20 +90,13 @@ def main() -> int:
 
     setup_logging(config.debug)
 
-    global _http_client
-    _http_client = config.create_http_client()
-
-    def _mask_value(value: str, prefix: int = 4) -> str:
-        if not value:
-            return ""
-        visible = value[:prefix]
-        return f"{visible}***"
+    http_client = config.create_http_client()
 
     logger.debug(
         "Loaded config values: %s",
         {
             "sonarr_url": config.sonarr_url,
-            "sonarr_apikey": _mask_value(config.sonarr_apikey),
+            "sonarr_apikey": Config._mask_value(config.sonarr_apikey),
             "webhook_url": config.webhook_url,
             "webhook_mode": config.webhook_mode,
             "webhook_message_template": config.webhook_message_template,
@@ -148,7 +113,7 @@ def main() -> int:
     try:
         provider = get_webhook_provider(config)
     except ValueError as e:
-        logger.error(f"Invalid webhook configuration: {e}")
+        logger.error("Invalid webhook configuration: %s", e)
         logger.info("Exiting with code 1 (invalid webhook configuration)")
         return 1
 
@@ -169,7 +134,7 @@ def main() -> int:
             len(seasons),
             elapsed,
         )
-        logger.info(f"Found {len(seasons)} new finished season(s)")
+        logger.info("Found %d new finished season(s)", len(seasons))
         for season in seasons:
             logger.info(
                 f"  - {season['show']} Season {season['season']} "
@@ -177,7 +142,7 @@ def main() -> int:
             )
 
         if config.webhook_url:
-            success = send_webhook(seasons, provider, config)
+            success = send_webhook(seasons, provider, config, http_client)
             if not success:
                 logger.error("Failed to send webhook notification")
                 logger.info("Exiting with code 1 (webhook send failed)")
@@ -191,7 +156,7 @@ def main() -> int:
         return 0
 
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.error("Unexpected error: %s", e)
         if config.debug:
             import traceback
 

@@ -1,7 +1,7 @@
 """Base webhook provider class."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ class WebhookProvider:
             template.format(
                 season_count=len(seasons),
                 period_days=self.config.get("lookback_days", 7),
-                timestamp=datetime.now().isoformat(),
+                timestamp=datetime.now(tz=UTC).isoformat(),
                 show_list=show_list,
             )
         )

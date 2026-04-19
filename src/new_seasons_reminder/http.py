@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import ssl
+import time
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -42,19 +43,69 @@ class HTTPClient:
         default_timeout: int = 30,
         user_agent: str | None = None,
         verify_ssl: bool = True,
+        max_retries: int = 3,
+        retry_backoff: float = 1.0,
     ):
         """Initialize HTTP client.
 
         Args:
             default_timeout: Default timeout in seconds.
             user_agent: Custom user agent string.
+            verify_ssl: Whether to verify SSL certificates.
+            max_retries: Maximum number of retry attempts for transient failures.
+            retry_backoff: Base delay in seconds between retries (doubles each attempt).
         """
         self.default_timeout = default_timeout
         self.user_agent = user_agent or (
             "new-seasons-reminder/1.0 (https://github.com/lkshrk/tautulli-new-seasons-reminder)"
         )
         self.verify_ssl = verify_ssl
+        self.max_retries = max_retries
+        self.retry_backoff = retry_backoff
         self._ssl_context = None if verify_ssl else ssl._create_unverified_context()
+
+    @staticmethod
+    def _is_retryable(error: Exception) -> bool:
+        """Check if an error is transient and worth retrying."""
+        # HTTPError inherits URLError → OSError, so check it first
+        if isinstance(error, HTTPError):
+            return error.code >= 500  # Only server errors
+        if isinstance(error, URLError | TimeoutError | OSError):
+            return True  # Connection errors, timeouts, OS-level failures
+        return False
+
+    def _request_with_retry(
+        self,
+        request: Request,
+        timeout: int,
+    ) -> bytes:
+        """Execute a request with retry logic for transient failures."""
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries):
+            try:
+                with urlopen(request, timeout=timeout, context=self._ssl_context) as response:
+                    logger.debug(
+                        "HTTP response status=%s content_length=%s",
+                        response.status,
+                        response.headers.get("Content-Length", "unknown"),
+                    )
+                    return cast(bytes, response.read())
+            except Exception as e:
+                last_error = e
+                if not self._is_retryable(e) or attempt == self.max_retries - 1:
+                    raise
+                delay = self.retry_backoff * (2**attempt)
+                safe_url = self._safe_log_url(request.full_url)
+                logger.warning(
+                    "Retryable error on %s (attempt %d/%d), retrying in %.1fs: %s",
+                    safe_url,
+                    attempt + 1,
+                    self.max_retries,
+                    delay,
+                    e,
+                )
+                time.sleep(delay)
+        raise last_error  # pragma: no cover
 
     def _safe_log_url(self, url: str) -> str:
         """Safely log URL with sensitive data redacted.
@@ -139,13 +190,7 @@ class HTTPClient:
         request.add_header("User-Agent", self.user_agent)
 
         try:
-            with urlopen(request, timeout=timeout, context=self._ssl_context) as response:
-                logger.debug(
-                    "HTTP GET response status=%s content_length=%s",
-                    response.status,
-                    response.headers.get("Content-Length", "unknown"),
-                )
-                return cast(bytes, response.read())
+            return self._request_with_retry(request, timeout)
         except HTTPError as e:
             logger.error(
                 "HTTP GET error for %s: status=%s reason=%s",
@@ -202,13 +247,7 @@ class HTTPClient:
         request.add_header("User-Agent", self.user_agent)
 
         try:
-            with urlopen(request, timeout=timeout, context=self._ssl_context) as response:
-                logger.debug(
-                    "HTTP POST response status=%s content_length=%s",
-                    response.status,
-                    response.headers.get("Content-Length", "unknown"),
-                )
-                return cast(bytes, response.read())
+            return self._request_with_retry(request, timeout)
         except HTTPError as e:
             logger.error(
                 "HTTP POST error for %s: status=%s reason=%s",

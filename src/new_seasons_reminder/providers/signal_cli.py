@@ -100,7 +100,7 @@ class SignalCliProvider(WebhookProvider):
     def _to_int(value: Any, default: int) -> int:
         try:
             return int(value)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return default
 
     def format_subject(self, seasons: list[dict[str, Any]]) -> str:

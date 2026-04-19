@@ -117,17 +117,7 @@ def get_completed_seasons(
                 )
                 continue
 
-        season_dict: dict[str, Any] = {
-            "show": season_ref.series_name,
-            "season": season_number,
-            "season_title": season_ref.season_title,
-            "added_at": candidate.completed_at.isoformat(),
-            "episode_count": candidate.in_library_episode_count,
-            "rating_key": season_ref.season_id,
-            "reason": f"Complete: {candidate.in_library_episode_count} episodes in library",
-            "expected_count": candidate.in_library_episode_count,
-        }
-        completed_seasons.append(season_dict)
+        completed_seasons.append(candidate.to_dict())
 
         logger.info(
             "Completed: %s (S%s) - %s episodes",

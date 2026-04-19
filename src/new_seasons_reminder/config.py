@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Config:
     """Application configuration loaded from environment variables."""
 
@@ -44,59 +44,42 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         """Create configuration from environment variables."""
-        config = cls()
-
-        # Sonarr settings
-        config.sonarr_url = os.environ.get("SONARR_URL", "")
-        config.sonarr_apikey = os.environ.get("SONARR_APIKEY", "")
-        logger.debug("Loaded SONARR_URL=%s", config.sonarr_url)
-        logger.debug("Loaded SONARR_APIKEY=%s", config._mask_value(config.sonarr_apikey))
-
-        # Webhook
-        config.webhook_url = os.environ.get("WEBHOOK_URL", "")
-        logger.debug("Loaded WEBHOOK_URL=%s", config.webhook_url)
-
-        config.webhook_mode = os.environ.get("WEBHOOK_MODE", "default")
-        logger.debug("Loaded WEBHOOK_MODE=%s", config.webhook_mode)
-
-        config.webhook_message_template = os.environ.get(
+        sonarr_url = os.environ.get("SONARR_URL", "")
+        sonarr_apikey = os.environ.get("SONARR_APIKEY", "")
+        webhook_url = os.environ.get("WEBHOOK_URL", "")
+        webhook_mode = os.environ.get("WEBHOOK_MODE", "default")
+        webhook_message_template = os.environ.get(
             "WEBHOOK_MESSAGE_TEMPLATE",
             "📺 {season_count} new season(s) completed this week!",
         )
-        logger.debug(
-            "Loaded WEBHOOK_MESSAGE_TEMPLATE=%s",
-            config.webhook_message_template,
+        webhook_on_empty = os.environ.get("WEBHOOK_ON_EMPTY", "false").lower() == "true"
+        webhook_payload_template = os.environ.get("WEBHOOK_PAYLOAD_TEMPLATE", "default")
+        signal_number = os.environ.get("SIGNAL_NUMBER", "")
+        signal_recipients = os.environ.get("SIGNAL_RECIPIENTS", "")
+        signal_text_mode = os.environ.get("SIGNAL_TEXT_MODE", "styled")
+        lookback_days = cls._get_lookback_days()
+        debug = os.environ.get("DEBUG", "false").lower() == "true"
+        include_new_shows = os.environ.get("INCLUDE_NEW_SHOWS", "false").lower() == "true"
+        disable_ssl_verify = os.environ.get("DISABLE_SSL_VERIFY", "false").lower() == "true"
+
+        config = cls(
+            sonarr_url=sonarr_url,
+            sonarr_apikey=sonarr_apikey,
+            webhook_url=webhook_url,
+            webhook_mode=webhook_mode,
+            webhook_message_template=webhook_message_template,
+            webhook_on_empty=webhook_on_empty,
+            webhook_payload_template=webhook_payload_template,
+            signal_number=signal_number,
+            signal_recipients=signal_recipients,
+            signal_text_mode=signal_text_mode,
+            lookback_days=lookback_days,
+            debug=debug,
+            include_new_shows=include_new_shows,
+            disable_ssl_verify=disable_ssl_verify,
         )
 
-        config.webhook_on_empty = os.environ.get("WEBHOOK_ON_EMPTY", "false").lower() == "true"
-        logger.debug("Loaded WEBHOOK_ON_EMPTY=%s", config.webhook_on_empty)
-
-        config.webhook_payload_template = os.environ.get("WEBHOOK_PAYLOAD_TEMPLATE", "default")
-        logger.debug("Loaded WEBHOOK_PAYLOAD_TEMPLATE=%s", config.webhook_payload_template)
-
-        # Signal CLI
-        config.signal_number = os.environ.get("SIGNAL_NUMBER", "")
-        logger.debug("Loaded SIGNAL_NUMBER=%s", config._mask_value(config.signal_number))
-
-        config.signal_recipients = os.environ.get("SIGNAL_RECIPIENTS", "")
-        logger.debug("Loaded SIGNAL_RECIPIENTS=%s", config._mask_value(config.signal_recipients))
-
-        config.signal_text_mode = os.environ.get("SIGNAL_TEXT_MODE", "styled")
-        logger.debug("Loaded SIGNAL_TEXT_MODE=%s", config.signal_text_mode)
-
-        # Application
-        config.lookback_days = cls._get_lookback_days()
-        logger.debug("Loaded LOOKBACK_DAYS=%s", config.lookback_days)
-
-        config.debug = os.environ.get("DEBUG", "false").lower() == "true"
-        logger.debug("Loaded DEBUG=%s", config.debug)
-
-        config.include_new_shows = os.environ.get("INCLUDE_NEW_SHOWS", "false").lower() == "true"
-        logger.debug("Loaded INCLUDE_NEW_SHOWS=%s", config.include_new_shows)
-
-        config.disable_ssl_verify = os.environ.get("DISABLE_SSL_VERIFY", "false").lower() == "true"
-        logger.debug("Loaded DISABLE_SSL_VERIFY=%s", config.disable_ssl_verify)
-
+        logger.debug("Loaded config: sonarr_url=%s, webhook_mode=%s", sonarr_url, webhook_mode)
         return config
 
     @staticmethod
@@ -125,7 +108,7 @@ class Config:
             logger.debug("Parsed LOOKBACK_DAYS=%s", days)
             return days
         except ValueError as e:
-            logger.warning(f"Invalid LOOKBACK_DAYS: {e}. Using default of 7.")
+            logger.warning("Invalid LOOKBACK_DAYS: %s. Using default of 7.", e)
             return 7
 
     def create_http_client(self) -> HTTPClient:
@@ -188,7 +171,7 @@ def setup_logging(debug: bool = False) -> logging.Logger:
     )
 
     logger = logging.getLogger(__name__)
-    logger.info(f"Logging initialized at {logging.getLevelName(level)} level")
+    logger.info("Logging initialized at %s level", logging.getLevelName(level))
 
     if debug:
         logger.debug("Debug mode enabled - verbose logging active")

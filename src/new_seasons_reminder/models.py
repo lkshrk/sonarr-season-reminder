@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,3 +44,16 @@ class CandidateSeason:
     completed_at: datetime  # Time when last episode was added (max episodeFile.dateAdded)
     in_library_episode_count: int  # Episodes currently in library
     is_complete_in_source: bool | None  # Source confirms completeness
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict for webhook payloads."""
+        return {
+            "show": self.season_ref.series_name,
+            "season": self.season_ref.season_key.season_number,
+            "season_title": self.season_ref.season_title,
+            "added_at": self.completed_at.isoformat(),
+            "episode_count": self.in_library_episode_count,
+            "rating_key": self.season_ref.season_id,
+            "reason": f"Complete: {self.in_library_episode_count} episodes in library",
+            "expected_count": self.in_library_episode_count,
+        }

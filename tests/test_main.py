@@ -102,71 +102,68 @@ class TestSendWebhook:
         cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
+        mock_http = MagicMock()
+        mock_http.post_json.return_value = {}
 
-        with patch("new_seasons_reminder.main._http_client") as mock_http:
-            mock_http.post_json.return_value = {}
-            result = send_webhook(seasons, provider, cfg)
-
+        result = send_webhook(seasons, provider, cfg, mock_http)
         assert result is True
 
     def test_returns_true_on_no_seasons_when_send_on_empty_false(self):
         cfg = _sonarr_config()
         provider = self._make_provider(should_send_empty=False)
+        mock_http = MagicMock()
 
-        result = send_webhook([], provider, cfg)
+        result = send_webhook([], provider, cfg, mock_http)
         assert result is True
 
     def test_sends_webhook_when_send_on_empty_true(self):
         cfg = _sonarr_config()
         provider = self._make_provider(should_send_empty=True)
+        mock_http = MagicMock()
+        mock_http.post_json.return_value = {}
 
-        with patch("new_seasons_reminder.main._http_client") as mock_http:
-            mock_http.post_json.return_value = {}
-            result = send_webhook([], provider, cfg)
-
+        result = send_webhook([], provider, cfg, mock_http)
         assert result is True
         mock_http.post_json.assert_called_once()
 
     def test_returns_false_when_no_webhook_url(self):
         cfg = _sonarr_config(webhook_url="")
         provider = self._make_provider(should_send_empty=True)
+        mock_http = MagicMock()
 
-        result = send_webhook([], provider, cfg)
+        result = send_webhook([], provider, cfg, mock_http)
         assert result is False
 
     def test_returns_false_on_http_error(self):
         cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
+        mock_http = MagicMock()
+        mock_http.post_json.side_effect = HTTPError(
+            url="http://example.com", code=500, msg="Server Error", hdrs=None, fp=None
+        )
 
-        with patch("new_seasons_reminder.main._http_client") as mock_http:
-            mock_http.post_json.side_effect = HTTPError(
-                url="http://example.com", code=500, msg="Server Error", hdrs=None, fp=None
-            )
-            result = send_webhook(seasons, provider, cfg)
-
+        result = send_webhook(seasons, provider, cfg, mock_http)
         assert result is False
 
     def test_returns_false_on_url_error(self):
         cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
+        mock_http = MagicMock()
+        mock_http.post_json.side_effect = URLError("connection refused")
 
-        with patch("new_seasons_reminder.main._http_client") as mock_http:
-            mock_http.post_json.side_effect = URLError("connection refused")
-            result = send_webhook(seasons, provider, cfg)
-
+        result = send_webhook(seasons, provider, cfg, mock_http)
         assert result is False
 
     def test_returns_false_on_unexpected_error(self):
         cfg = _sonarr_config()
         provider = self._make_provider()
         seasons = _make_seasons()
+        mock_http = MagicMock()
+        mock_http.post_json.side_effect = RuntimeError("unexpected")
 
-        with patch("new_seasons_reminder.main._http_client") as mock_http:
-            mock_http.post_json.side_effect = RuntimeError("unexpected")
-            result = send_webhook(seasons, provider, cfg)
-
+        result = send_webhook(seasons, provider, cfg, mock_http)
         assert result is False
 
 

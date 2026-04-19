@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from .base import WebhookProvider
@@ -37,7 +37,7 @@ class GenericProvider(WebhookProvider):
             # Replace template variables
             template_str = payload_template
             template_str = template_str.replace(
-                "{timestamp}", json.dumps(datetime.now().isoformat())
+                "{timestamp}", json.dumps(datetime.now(tz=UTC).isoformat())
             )
             template_str = template_str.replace(
                 "{period_days}", json.dumps(self.config.get("lookback_days", 7))
@@ -63,7 +63,7 @@ class GenericProvider(WebhookProvider):
         # Default template
         logger.debug("Using default payload template with season_count=%d", len(seasons))
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(tz=UTC).isoformat(),
             "period_days": self.config.get("lookback_days", 7),
             "season_count": len(seasons),
             "seasons": seasons,

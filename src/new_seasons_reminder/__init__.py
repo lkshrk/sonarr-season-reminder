@@ -40,10 +40,14 @@ def send_webhook(
     seasons: list[dict[str, Any]],
     provider: WebhookProvider,
     config: Config,
+    http_client: Any = None,
 ) -> bool:
+    from .http import HTTPClient
     from .main import send_webhook as send
 
-    return send(seasons, provider, config)
+    if http_client is None:
+        http_client = HTTPClient()
+    return send(seasons, provider, config, http_client)
 
 
 __all__ = [

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "tautulli-new-seasons-reminder"
 version = "1.4.0"
 description = "Tautulli custom script for weekly new season reminders via webhooks"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 license = "MIT"
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
@@ -17,19 +17,12 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
 
 dependencies = []
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0.0",
-    "twine>=4.0.0",
-]
 
 [project.scripts]
 new-seasons-reminder = "new_seasons_reminder.main:main"
@@ -92,7 +85,7 @@ exclude_lines = [
 ]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -107,7 +100,7 @@ strict_equality = true
 ignore_missing_imports = true
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
