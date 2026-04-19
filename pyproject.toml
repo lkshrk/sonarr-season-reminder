@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tautulli-new-seasons-reminder"
-version = "1.4.0"
+version = "1.5.0"
 description = "Tautulli custom script for weekly new season reminders via webhooks"
 requires-python = ">=3.12"
 license = "MIT"
