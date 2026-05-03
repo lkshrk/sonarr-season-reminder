@@ -42,10 +42,10 @@ class TestConfigFromEnvDefaults:
             cfg = Config.from_env()
         assert cfg.debug is False
 
-    def test_include_new_shows_defaults_to_false(self):
+    def test_include_new_shows_defaults_to_true(self):
         with patch.dict(os.environ, _env(), clear=True):
             cfg = Config.from_env()
-        assert cfg.include_new_shows is False
+        assert cfg.include_new_shows is True
 
     def test_webhook_on_empty_defaults_to_false(self):
         with patch.dict(os.environ, _env(), clear=True):
@@ -93,6 +93,11 @@ class TestConfigFromEnvExplicit:
         with patch.dict(os.environ, _env(INCLUDE_NEW_SHOWS="true"), clear=True):
             cfg = Config.from_env()
         assert cfg.include_new_shows is True
+
+    def test_reads_include_new_shows_false(self):
+        with patch.dict(os.environ, _env(INCLUDE_NEW_SHOWS="false"), clear=True):
+            cfg = Config.from_env()
+        assert cfg.include_new_shows is False
 
     def test_reads_webhook_on_empty_true(self):
         with patch.dict(os.environ, _env(WEBHOOK_ON_EMPTY="true"), clear=True):

@@ -87,10 +87,13 @@ def _sonarr_episode(
     episode_number=1,
     has_file=True,
     date_added=None,
+    air_date_utc=None,
 ):
     """Create a mock Sonarr episode."""
     if date_added is None:
         date_added = _recent_ts(1)
+    if air_date_utc is None:
+        air_date_utc = (_now() - timedelta(days=2)).isoformat()
     ep = {
         "id": episode_id,
         "seriesId": series_id,
@@ -98,6 +101,7 @@ def _sonarr_episode(
         "episodeNumber": episode_number,
         "title": f"Episode {episode_number}",
         "hasFile": has_file,
+        "airDateUtc": air_date_utc,
     }
     if has_file:
         ep["episodeFile"] = {
@@ -265,6 +269,7 @@ class TestSonarrGetCandidateSeasons:
     def test_skips_still_airing_season(self):
         """Season with all aired episodes downloaded but still airing should be skipped."""
         since = _now() - timedelta(days=7)
+        recent_ts = _recent_ts(1)
 
         series = [
             _sonarr_series_item(
@@ -281,10 +286,225 @@ class TestSonarrGetCandidateSeasons:
             )
         ]
 
-        http = _make_http(return_value=series)
+        episodes = [
+            _sonarr_episode(
+                episode_id=1,
+                date_added=recent_ts,
+                air_date_utc=(_now() - timedelta(days=3)).isoformat(),
+            ),
+            _sonarr_episode(
+                episode_id=2,
+                episode_number=2,
+                has_file=False,
+                air_date_utc=(_now() + timedelta(days=3)).isoformat(),
+            ),
+        ]
+
+        http = _make_http(side_effect=[series, episodes])
         source = self._source(http)
 
         candidates = list(source.get_candidate_seasons(since))
+        assert candidates == []
+
+    def test_reports_season_that_finished_airing_with_files_already_present(self):
+        since = _now() - timedelta(days=7)
+        old_file_ts = (_now() - timedelta(days=30)).isoformat()
+        recent_air_ts = (_now() - timedelta(days=1)).isoformat()
+
+        series = [
+            _sonarr_series_item(
+                series_id=1,
+                title="Recently Finished",
+                seasons=[_sonarr_season_stats(1, 2, 2, total_episode_count=2)],
+            )
+        ]
+        episodes = [
+            _sonarr_episode(
+                episode_id=1,
+                date_added=old_file_ts,
+                air_date_utc=(_now() - timedelta(days=14)).isoformat(),
+            ),
+            _sonarr_episode(
+                episode_id=2,
+                episode_number=2,
+                date_added=old_file_ts,
+                air_date_utc=recent_air_ts,
+            ),
+        ]
+
+        http = _make_http(side_effect=[series, episodes])
+        source = self._source(http)
+
+        candidates = list(source.get_candidate_seasons(since))
+
+        assert len(candidates) == 1
+        assert candidates[0].season_ref.series_name == "Recently Finished"
+        assert candidates[0].completed_at.isoformat() == recent_air_ts
+
+    def test_skips_old_finished_season_when_recent_file_date_is_only_replacement(self):
+        since = _now() - timedelta(days=7)
+        old_ts = (_now() - timedelta(days=30)).isoformat()
+        recent_replacement_ts = (_now() - timedelta(days=1)).isoformat()
+
+        series = [
+            _sonarr_series_item(
+                series_id=1,
+                title="Old Upgraded",
+                seasons=[_sonarr_season_stats(1, 2, 2, total_episode_count=2)],
+            )
+        ]
+        episodes = [
+            _sonarr_episode(episode_id=1, date_added=old_ts, air_date_utc=old_ts),
+            _sonarr_episode(
+                episode_id=2,
+                episode_number=2,
+                date_added=recent_replacement_ts,
+                air_date_utc=old_ts,
+            ),
+        ]
+        history = {
+            "page": 1,
+            "pageSize": 1000,
+            "totalRecords": 2,
+            "records": [
+                {
+                    "episodeId": 1,
+                    "seriesId": 1,
+                    "date": old_ts,
+                    "eventType": "downloadFolderImported",
+                },
+                {
+                    "episodeId": 2,
+                    "seriesId": 1,
+                    "date": old_ts,
+                    "eventType": "downloadFolderImported",
+                },
+                {
+                    "episodeId": 2,
+                    "seriesId": 1,
+                    "date": recent_replacement_ts,
+                    "eventType": "downloadFolderImported",
+                },
+            ],
+        }
+
+        http = _make_http(side_effect=[series, episodes, history])
+        source = self._source(http)
+
+        candidates = list(source.get_candidate_seasons(since))
+
+        assert candidates == []
+
+    def test_reports_old_finished_season_when_missing_episode_imported_recently(self):
+        since = _now() - timedelta(days=7)
+        old_ts = (_now() - timedelta(days=30)).isoformat()
+        recent_import_ts = (_now() - timedelta(days=1)).isoformat()
+
+        series = [
+            _sonarr_series_item(
+                series_id=1,
+                title="Recently Completed Library",
+                seasons=[_sonarr_season_stats(1, 2, 2, total_episode_count=2)],
+            )
+        ]
+        episodes = [
+            _sonarr_episode(episode_id=1, date_added=old_ts, air_date_utc=old_ts),
+            _sonarr_episode(
+                episode_id=2,
+                episode_number=2,
+                date_added=recent_import_ts,
+                air_date_utc=old_ts,
+            ),
+        ]
+        history = {
+            "page": 1,
+            "pageSize": 1000,
+            "totalRecords": 2,
+            "records": [
+                {
+                    "episodeId": 1,
+                    "seriesId": 1,
+                    "date": old_ts,
+                    "eventType": "downloadFolderImported",
+                },
+                {
+                    "episodeId": 2,
+                    "seriesId": 1,
+                    "date": recent_import_ts,
+                    "eventType": "downloadFolderImported",
+                },
+            ],
+        }
+
+        http = _make_http(side_effect=[series, episodes, history])
+        source = self._source(http)
+
+        candidates = list(source.get_candidate_seasons(since))
+
+        assert len(candidates) == 1
+        assert candidates[0].season_ref.series_name == "Recently Completed Library"
+        assert candidates[0].completed_at.isoformat() == recent_import_ts
+
+    def test_reports_newly_added_show_with_old_available_season(self):
+        since = _now() - timedelta(days=7)
+        old_ts = (_now() - timedelta(days=30)).isoformat()
+        recent_added_ts = (_now() - timedelta(days=1)).isoformat()
+
+        series = [
+            _sonarr_series_item(
+                series_id=1,
+                title="Newly Added Old Show",
+                added_date=recent_added_ts,
+                seasons=[_sonarr_season_stats(1, 2, 2, total_episode_count=2)],
+            )
+        ]
+        episodes = [
+            _sonarr_episode(episode_id=1, date_added=old_ts, air_date_utc=old_ts),
+            _sonarr_episode(
+                episode_id=2,
+                episode_number=2,
+                date_added=old_ts,
+                air_date_utc=old_ts,
+            ),
+        ]
+
+        http = _make_http(side_effect=[series, episodes])
+        source = self._source(http)
+
+        candidates = list(source.get_candidate_seasons(since))
+
+        assert len(candidates) == 1
+        assert candidates[0].season_ref.series_name == "Newly Added Old Show"
+        assert candidates[0].completed_at.isoformat() == recent_added_ts
+
+    def test_skips_newly_added_show_when_old_season_is_not_fully_available(self):
+        since = _now() - timedelta(days=7)
+        old_ts = (_now() - timedelta(days=30)).isoformat()
+        recent_added_ts = (_now() - timedelta(days=1)).isoformat()
+
+        series = [
+            _sonarr_series_item(
+                series_id=1,
+                title="New But Missing",
+                added_date=recent_added_ts,
+                seasons=[_sonarr_season_stats(1, 1, 2, total_episode_count=2)],
+            )
+        ]
+        episodes = [
+            _sonarr_episode(episode_id=1, date_added=old_ts, air_date_utc=old_ts),
+            _sonarr_episode(
+                episode_id=2,
+                episode_number=2,
+                has_file=False,
+                air_date_utc=old_ts,
+            ),
+        ]
+
+        http = _make_http(side_effect=[series, episodes])
+        source = self._source(http)
+
+        candidates = list(source.get_candidate_seasons(since))
+
         assert candidates == []
 
     def test_handles_multiple_series_and_seasons(self):

@@ -12,6 +12,28 @@ build/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# AI assistants / local agent state
+.agents/
+.aider*
+.amazonq/
+.claude/
+.claude.json
+.claude.local.json
+.cline/
+.codex/
+.continue/
+.crush/
+.cursor/
+.gemini/
+.goose/
+.leankg/
+.qodo/
+.roo/
+.sisyphus/
+.tabnine/
+.windsurf/
+leankg.yaml
+
 # Environment
 .env
 .env.local
@@ -30,6 +52,10 @@ uv.lock
 *.code-workspace
 .history/
 
+# IDE - Cursor / Windsurf
+.cursor/
+.windsurf/
+
 # IDE - JetBrains (PyCharm, IntelliJ, etc.)
 .idea/
 *.iml
@@ -41,17 +67,31 @@ out/
 # IDE - Vim/Neovim
 *.swp
 *.swo
+*.swn
 *~
 .netrwhist
+.session.vim
+Session.vim
+Sessionx.vim
 
 # IDE - Emacs
 *~
 \#*\#
 .\#*
+auto-save-list/
+tramp
 
 # IDE - Sublime Text
 *.sublime-project
 *.sublime-workspace
+
+# IDE - Zed / Fleet / Nova / Lapce / Helix / Kate
+.fleet/
+.helix/
+.lapce/
+.nova/
+.zed/
+*.kate-swp
 
 # IDE - Eclipse
 .project
@@ -74,21 +114,31 @@ nbproject/
 .LSOverride
 Icon
 ._*
+.DocumentRevisions-V100
+.TemporaryItems
+.VolumeIcon.icns
+.apdisk
+.com.apple.timemachine.donotpresent
+.fseventsd
 .Spotlight-V100
 .Trashes
+Network Trash Folder
+Temporary Items
 
 # Windows
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
+*.lnk
 *.stackdump
+*.Zone.Identifier
 [Dd]esktop.ini
 $RECYCLE.BIN/
-*.lnk
 
 # Linux
 *~
+.fuse_hidden*
 .nfs*
 .directory
 .Trash-*

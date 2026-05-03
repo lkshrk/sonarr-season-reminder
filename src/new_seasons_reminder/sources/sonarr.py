@@ -15,14 +15,22 @@ from new_seasons_reminder.sources.base import MediaSource
 
 logger = logging.getLogger(__name__)
 
+_IMPORT_HISTORY_EVENTS = {
+    "downloadFolderImported",
+    "seriesFolderImported",
+    2,  # seriesFolderImported in generated Sonarr API enums
+    3,  # downloadFolderImported in generated Sonarr API enums
+}
+
 
 class SonarrMediaSource(MediaSource):
     """Sonarr media source adapter.
 
     Sonarr provides all the data we need for season completion detection:
-    - Season statistics (episodeFileCount, episodeCount)
+    - Episode aired timestamps
+    - Episode file import timestamps
     - Series added timestamp
-    - Episode file DateAdded for completion time
+    - Optional history data for original import timestamps
 
     Uses Sonarr API v3.
     """
@@ -52,9 +60,9 @@ class SonarrMediaSource(MediaSource):
         """Get seasons that became candidates since the given timestamp.
 
         A season is a candidate when:
-        1. episodeFileCount >= episodeCount (all aired episodes downloaded)
-        2. episodeCount > 0 (season has started airing)
-        3. The last episode file was added >= since timestamp
+        1. All known regular episodes have aired
+        2. All known regular episodes have files
+        3. The season became both finished and available >= since timestamp
 
         Args:
             since: Only return seasons with completed_at >= this timestamp.
@@ -84,92 +92,55 @@ class SonarrMediaSource(MediaSource):
             if not isinstance(series_id, int):
                 continue
             series_title = series.get("title", "Unknown")
-            seasons = series.get("seasons", [])
+            series_added_at = self._parse_datetime(series.get("added"))
 
-            # Collect complete seasons for this series
-            complete_seasons: list[int] = []
-            season_episode_counts: dict[int, int] = {}
-
-            for season in seasons:
-                season_number = season.get("seasonNumber", 0)
-                statistics = season.get("statistics", {})
-
-                if not statistics:
-                    continue
-
-                episode_count = statistics.get("episodeCount", 0)
-                episode_file_count = statistics.get("episodeFileCount", 0)
-
-                # Skip specials (season 0)
-                if season_number == 0:
-                    logger.debug("Skipping special season for %s", series_title)
-                    continue
-
-                total_episode_count = statistics.get("totalEpisodeCount", 0)
-
-                # Check if season is complete (all aired episodes have files)
-                if episode_count == 0:
-                    logger.debug(
-                        "Season %s S%d has no aired episodes, skipping",
-                        series_title,
-                        season_number,
-                    )
-                    continue
-
-                # Check if season has finished airing (no unaired episodes)
-                if episode_count < total_episode_count:
-                    logger.debug(
-                        "Season %s S%d still airing: %d/%d episodes aired",
-                        series_title,
-                        season_number,
-                        episode_count,
-                        total_episode_count,
-                    )
-                    continue
-
-                if episode_file_count < episode_count:
-                    logger.debug(
-                        "Season %s S%d incomplete: %d/%d episodes",
-                        series_title,
-                        season_number,
-                        episode_file_count,
-                        episode_count,
-                    )
-                    continue
-
-                # Season is complete - mark for batch processing
-                complete_seasons.append(season_number)
-                season_episode_counts[season_number] = episode_file_count
-
-            if not complete_seasons:
+            episodes_by_season = self._get_series_episodes_by_season(series_id)
+            if not episodes_by_season:
                 continue
 
-            # Batch fetch all episodes for this series once
-            season_completed_times = self._get_series_seasons_completed_at(series_id)
+            first_imported_at_by_episode: dict[int, datetime] | None = None
 
-            for season_number in complete_seasons:
-                completed_at = season_completed_times.get(season_number)
-
-                if completed_at is None:
-                    logger.warning(
-                        "Could not determine completion time for %s S%d, skipping",
-                        series_title,
-                        season_number,
-                    )
+            for season_number, episodes in episodes_by_season.items():
+                season_state = self._get_finished_available_state(
+                    series_title=series_title,
+                    season_number=season_number,
+                    episodes=episodes,
+                )
+                if season_state is None:
                     continue
 
-                # Filter by since timestamp
-                if completed_at < since:
+                completed_at, episode_count, latest_air_at, latest_file_at = season_state
+
+                if latest_air_at is not None and latest_air_at < since and latest_file_at >= since:
+                    if first_imported_at_by_episode is None:
+                        first_imported_at_by_episode = self._get_series_episode_first_imported_at(
+                            series_id
+                        )
+                    history_completed_at = self._get_history_based_completed_at(
+                        episodes=episodes,
+                        latest_air_at=latest_air_at,
+                        fallback_completed_at=completed_at,
+                        first_imported_at_by_episode=first_imported_at_by_episode,
+                    )
+                    if history_completed_at is not None:
+                        completed_at = history_completed_at
+
+                newly_added_at = (
+                    series_added_at
+                    if series_added_at is not None and series_added_at >= since
+                    else None
+                )
+                if completed_at < since and newly_added_at is None:
                     logger.debug(
-                        "Season %s S%d completed at %s before since %s, skipping",
+                        "Season %s S%d became complete at %s before since %s, skipping",
                         series_title,
                         season_number,
                         completed_at,
                         since,
                     )
                     continue
-
-                episode_file_count = season_episode_counts[season_number]
+                if newly_added_at is not None and completed_at < newly_added_at:
+                    completed_at = newly_added_at
 
                 # Create unique season_id per season
                 season_key = SeasonKey(
@@ -188,7 +159,7 @@ class SonarrMediaSource(MediaSource):
                 candidate = CandidateSeason(
                     season_ref=season_ref,
                     completed_at=completed_at,
-                    in_library_episode_count=episode_file_count,
+                    in_library_episode_count=episode_count,
                     is_complete_in_source=True,  # Sonarr confirms completeness
                 )
                 candidates.append(candidate)
@@ -197,7 +168,7 @@ class SonarrMediaSource(MediaSource):
                     "Found complete season: %s S%d (%d episodes, completed at %s)",
                     series_title,
                     season_number,
-                    episode_file_count,
+                    episode_count,
                     completed_at,
                 )
 
@@ -342,30 +313,29 @@ class SonarrMediaSource(MediaSource):
             logger.error("Error parsing series response: %s", e)
             return None
 
-    def _get_series_seasons_completed_at(
+    @staticmethod
+    def _parse_datetime(value: Any) -> datetime | None:
+        """Parse a Sonarr timestamp into a timezone-aware datetime."""
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed
+
+    def _get_series_episodes_by_season(
         self,
         series_id: int,
-    ) -> dict[int, datetime]:
-        """Get completion timestamps for all seasons of a series in one API call.
-
-        This batches the episode fetch to avoid N+1 API calls when processing
-        multiple seasons of the same series.
-
-        Args:
-            series_id: Sonarr series ID
-
-        Returns:
-            Dict mapping season_number to max(episodeFile.dateAdded) for that season.
-            Seasons with no valid dates are not included.
-        """
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Fetch and group all regular episodes for a series by season."""
         url = f"{self.sonarr_url}/api/v3/episode"
         params = {
             "seriesId": str(series_id),
             "includeEpisodeFile": "true",
         }
-
-        # season_number -> list of completed_at timestamps
-        season_times: dict[int, list[datetime]] = defaultdict(list)
 
         try:
             data = self._http_client.get_json(url, params=params, headers=self._headers)
@@ -376,39 +346,16 @@ class SonarrMediaSource(MediaSource):
                 )
                 return {}
 
+            episodes_by_season: dict[int, list[dict[str, Any]]] = defaultdict(list)
             for episode in data:
-                episode_file = episode.get("episodeFile", {})
-                if not episode_file:
+                if not isinstance(episode, dict):
                     continue
-
-                date_added = episode_file.get("dateAdded")
-                if not date_added:
-                    continue
-
                 season_number = episode.get("seasonNumber", 0)
-                if season_number == 0:  # Skip specials
+                if not isinstance(season_number, int) or season_number == 0:
                     continue
+                episodes_by_season[season_number].append(episode)
 
-                try:
-                    if isinstance(date_added, str):
-                        parsed_date = datetime.fromisoformat(date_added.replace("Z", "+00:00"))
-                        season_times[season_number].append(parsed_date)
-                except (ValueError, AttributeError) as e:
-                    logger.debug(
-                        "Failed to parse dateAdded for episode in series %s: %s - %s",
-                        series_id,
-                        date_added,
-                        e,
-                    )
-                    continue
-
-            # Compute max date per season
-            result: dict[int, datetime] = {}
-            for season_number, times in season_times.items():
-                if times:
-                    result[season_number] = max(times)
-
-            return result
+            return dict(episodes_by_season)
 
         except HTTPError as e:
             logger.error(
@@ -428,3 +375,179 @@ class SonarrMediaSource(MediaSource):
         except (ValueError, KeyError) as e:
             logger.error("Error parsing episode response: %s", e)
             return {}
+
+    def _get_finished_available_state(
+        self,
+        series_title: str,
+        season_number: int,
+        episodes: list[dict[str, Any]],
+    ) -> tuple[datetime, int, datetime | None, datetime] | None:
+        """Return completion state when every known episode is aired and available."""
+        now = datetime.now(tz=UTC)
+        air_dates: list[datetime] = []
+        file_dates: list[datetime] = []
+
+        if not episodes:
+            return None
+
+        for episode in episodes:
+            air_date = self._parse_datetime(episode.get("airDateUtc"))
+            if air_date is not None:
+                if air_date > now:
+                    logger.debug(
+                        "Season %s S%d still airing: episode %s airs at %s",
+                        series_title,
+                        season_number,
+                        episode.get("episodeNumber", "?"),
+                        air_date,
+                    )
+                    return None
+                air_dates.append(air_date)
+
+            episode_file = episode.get("episodeFile", {})
+            if not episode.get("hasFile") or not isinstance(episode_file, dict):
+                logger.debug(
+                    "Season %s S%d unavailable: episode %s has no file",
+                    series_title,
+                    season_number,
+                    episode.get("episodeNumber", "?"),
+                )
+                return None
+
+            file_date = self._parse_datetime(episode_file.get("dateAdded"))
+            if file_date is None:
+                logger.warning(
+                    "Could not determine file import time for %s S%d episode %s",
+                    series_title,
+                    season_number,
+                    episode.get("episodeNumber", "?"),
+                )
+                return None
+            file_dates.append(file_date)
+
+        if not file_dates:
+            return None
+
+        latest_air_at = max(air_dates) if air_dates else None
+        latest_file_at = max(file_dates)
+        completed_at = max(latest_air_at, latest_file_at) if latest_air_at else latest_file_at
+        return completed_at, len(episodes), latest_air_at, latest_file_at
+
+    def _get_history_based_completed_at(
+        self,
+        episodes: list[dict[str, Any]],
+        latest_air_at: datetime,
+        fallback_completed_at: datetime,
+        first_imported_at_by_episode: dict[int, datetime],
+    ) -> datetime | None:
+        """Use first import history so upgrades do not make old seasons look new."""
+        first_import_dates: list[datetime] = []
+        for episode in episodes:
+            episode_id = episode.get("id")
+            if isinstance(episode_id, int):
+                first_imported_at = first_imported_at_by_episode.get(episode_id)
+                if first_imported_at is not None:
+                    first_import_dates.append(first_imported_at)
+                    continue
+
+            episode_file = episode.get("episodeFile", {})
+            if isinstance(episode_file, dict):
+                file_date = self._parse_datetime(episode_file.get("dateAdded"))
+                if file_date is not None:
+                    first_import_dates.append(file_date)
+
+        if len(first_import_dates) != len(episodes):
+            return fallback_completed_at
+
+        first_available_at = max(first_import_dates)
+        return max(latest_air_at, first_available_at)
+
+    def _get_series_episode_first_imported_at(
+        self,
+        series_id: int,
+    ) -> dict[int, datetime]:
+        """Fetch earliest import history for each episode in a series."""
+        url = f"{self.sonarr_url}/api/v3/history"
+        page = 1
+        page_size = 1000
+        result: dict[int, datetime] = {}
+
+        while True:
+            params = {
+                "page": str(page),
+                "pageSize": str(page_size),
+                "sortKey": "date",
+                "sortDirection": "ascending",
+                "includeSeries": "false",
+                "includeEpisode": "false",
+                "seriesIds": str(series_id),
+            }
+
+            try:
+                data = self._http_client.get_json(url, params=params, headers=self._headers)
+            except HTTPError as e:
+                logger.warning(
+                    "HTTP error fetching history for series %s: %s - %s",
+                    series_id,
+                    e.code,
+                    e.reason,
+                )
+                return result
+            except URLError as e:
+                logger.warning(
+                    "URL error fetching history for series %s: %s",
+                    series_id,
+                    e.reason,
+                )
+                return result
+            except (ValueError, KeyError) as e:
+                logger.warning("Error parsing history response for series %s: %s", series_id, e)
+                return result
+
+            if not isinstance(data, dict):
+                logger.warning("Unexpected response from /history for series %s", series_id)
+                return result
+
+            records = data.get("records", [])
+            if not isinstance(records, list) or not records:
+                return result
+
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                if record.get("eventType") not in _IMPORT_HISTORY_EVENTS:
+                    continue
+
+                imported_at = self._parse_datetime(record.get("date"))
+                if imported_at is None:
+                    continue
+
+                for episode_id in self._get_history_episode_ids(record):
+                    current = result.get(episode_id)
+                    if current is None or imported_at < current:
+                        result[episode_id] = imported_at
+
+            total_records = data.get("totalRecords")
+            if not isinstance(total_records, int) or page * page_size >= total_records:
+                return result
+            page += 1
+
+    @staticmethod
+    def _get_history_episode_ids(record: dict[str, Any]) -> list[int]:
+        """Extract episode ids from Sonarr history records across API variants."""
+        episode_ids: list[int] = []
+        episode_id = record.get("episodeId")
+        if isinstance(episode_id, int):
+            episode_ids.append(episode_id)
+
+        raw_episode_ids = record.get("episodeIds")
+        if isinstance(raw_episode_ids, list):
+            episode_ids.extend(i for i in raw_episode_ids if isinstance(i, int))
+
+        episode = record.get("episode")
+        if isinstance(episode, dict):
+            nested_episode_id = episode.get("id")
+            if isinstance(nested_episode_id, int):
+                episode_ids.append(nested_episode_id)
+
+        return list(dict.fromkeys(episode_ids))

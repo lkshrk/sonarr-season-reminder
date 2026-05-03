@@ -95,7 +95,18 @@ class TestGetCompletedSeasons:
         assert result[0]["season"] == 3
         assert result[0]["episode_count"] == 13
 
-    def test_filters_out_new_shows_by_default(self):
+    def test_includes_new_shows_by_default(self):
+        since = datetime(2026, 1, 1, tzinfo=UTC)
+        candidate = _make_candidate(series_name="New Show", series_id="5")
+        new_date = datetime(2026, 1, 10, tzinfo=UTC)
+        source = _mock_source(candidates=[candidate], show_added_at=new_date)
+
+        result = get_completed_seasons(source, since)
+
+        assert len(result) == 1
+        assert result[0]["show"] == "New Show"
+
+    def test_filters_out_new_shows_when_flag_disabled(self):
         since = datetime(2026, 1, 1, tzinfo=UTC)
         candidate = _make_candidate(series_name="New Show", series_id="5")
         # Show added after since → is_new_show returns True → filtered out

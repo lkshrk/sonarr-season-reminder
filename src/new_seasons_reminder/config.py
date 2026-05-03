@@ -41,7 +41,7 @@ class Config:
     # Application settings
     lookback_days: int = 7
     debug: bool = False
-    include_new_shows: bool = False
+    include_new_shows: bool = True
     disable_ssl_verify: bool = False
 
     @classmethod
@@ -63,7 +63,7 @@ class Config:
         message_templates_file = os.environ.get("MESSAGE_TEMPLATES_FILE", "")
         lookback_days = cls._get_lookback_days()
         debug = os.environ.get("DEBUG", "false").lower() == "true"
-        include_new_shows = os.environ.get("INCLUDE_NEW_SHOWS", "false").lower() == "true"
+        include_new_shows = os.environ.get("INCLUDE_NEW_SHOWS", "true").lower() == "true"
         disable_ssl_verify = os.environ.get("DISABLE_SSL_VERIFY", "false").lower() == "true"
 
         config = cls(

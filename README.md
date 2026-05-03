@@ -56,7 +56,7 @@ All configuration is via environment variables.
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LOOKBACK_DAYS` | Days to look back for completed seasons (1–365) | `7` |
-| `INCLUDE_NEW_SHOWS` | Include shows first added within the lookback window | `false` |
+| `INCLUDE_NEW_SHOWS` | Include shows first added within the lookback window | `true` |
 | `DISABLE_SSL_VERIFY` | Disable TLS certificate verification for HTTP calls | `false` |
 | `DEBUG` | Verbose logging | `false` |
 

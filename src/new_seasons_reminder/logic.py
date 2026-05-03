@@ -57,18 +57,18 @@ def is_new_show(
 def get_completed_seasons(
     source: MediaSource,
     since: datetime,
-    include_new_shows: bool = False,
+    include_new_shows: bool = True,
 ) -> list[dict[str, Any]]:
     """Get seasons that are completed.
 
     This function:
-    1. Gets candidate seasons from Sonarr (seasons with all aired episodes downloaded)
+    1. Gets candidate seasons from Sonarr
     2. Optionally filters out new shows (first added within the since window)
 
     Args:
         source: Media source adapter (Sonarr)
         since: Only consider seasons completed at or after this datetime
-        include_new_shows: If False (default), skip shows first added within the since window
+        include_new_shows: If False, skip shows first added within the since window
 
     Returns:
         List of completed seasons with completion details
