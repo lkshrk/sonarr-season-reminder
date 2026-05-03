@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-05-03)
+
+### Features
+
+- **sonarr**: Report newly available seasons
+  ([`efe1079`](https://github.com/lkshrk/sonarr-season-reminder/commit/efe10793db7dc211d5583443a273db446f3aec77))
+
+
 ## v1.5.0 (2026-04-19)
 
 ### Bug Fixes
