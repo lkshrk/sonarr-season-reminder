@@ -38,7 +38,7 @@ jobs:
         uv run pytest --cov=new_seasons_reminder --cov-report=xml --cov-report=term
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         files: ./coverage.xml
         flags: unittests
