@@ -1,6 +1,6 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": ["config:recommended", ":dependencyDashboard", "schedule:earlyMondays"],
+	"extends": ["config:recommended", ":dependencyDashboard", "schedule:earlyMondays", "github>lkshrk/gh-ops//renovate/presets/github-actions.json5"],
 	"rangeStrategy": "replace",
 	"semanticCommitType": "fix",
 	"semanticCommitScope": "deps",
@@ -21,7 +21,6 @@
 	"lockFileMaintenance": {
 		"enabled": true,
 		"automerge": true,
-		"automergeType": "branch",
 		"schedule": ["before 4am on sunday"]
 	},
 	"prConcurrentLimit": 5,
