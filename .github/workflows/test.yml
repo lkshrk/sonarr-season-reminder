@@ -3,10 +3,16 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - '**'
+      - main
   pull_request:
     branches:
       - '**'
+  workflow_dispatch:
+
+# Preserve CI evidence for every direct-to-main commit by never cancelling main runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
