@@ -5,8 +5,27 @@
 		"github>lkshrk/gh-ops//renovate/presets/automerge-major.json5",
 		"helpers:pinGitHubActionDigests"
 	],
-	"semanticCommitType": "fix",
-	"semanticCommitScope": "deps",
+	"packageRules": [
+		{
+			"description": "Everything outside CI ships in the released image, so commit updates as fixes to trigger a release",
+			"matchPackageNames": [
+				"*"
+			],
+			"semanticCommitType": "fix"
+		},
+		{
+			"matchUpdateTypes": [
+				"lockFileMaintenance"
+			],
+			"semanticCommitType": "fix"
+		},
+		{
+			"matchFileNames": [
+				".github/**"
+			],
+			"semanticCommitType": "chore"
+		}
+	],
 	"prConcurrentLimit": 5,
 	"prHourlyLimit": 2,
 	"timezone": "Europe/Berlin"
