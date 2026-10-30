@@ -1,28 +1,12 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": ["config:recommended", ":dependencyDashboard", "schedule:earlyMondays", "github>lkshrk/gh-ops//renovate/presets/github-actions.json5"],
-	"rangeStrategy": "replace",
+	"extends": [
+		"github>lkshrk/gh-ops//renovate/presets/app-library.json5",
+		"github>lkshrk/gh-ops//renovate/presets/automerge-major.json5",
+		"helpers:pinGitHubActionDigests"
+	],
 	"semanticCommitType": "fix",
 	"semanticCommitScope": "deps",
-	"automerge": true,
-	"automergeType": "pr",
-	"automergeStrategy": "squash",
-	"platformAutomerge": true,
-	"packageRules": [
-		{
-			"matchUpdateTypes": ["patch", "minor", "major"],
-			"automerge": true
-		},
-		{
-			"matchDepTypes": ["engines"],
-			"enabled": false
-		}
-	],
-	"lockFileMaintenance": {
-		"enabled": true,
-		"automerge": true,
-		"schedule": ["before 4am on sunday"]
-	},
 	"prConcurrentLimit": 5,
 	"prHourlyLimit": 2,
 	"timezone": "Europe/Berlin"
