@@ -1,7 +1,6 @@
 # New Seasons Reminder
 
 [![CI](https://github.com/lkshrk/sonarr-season-reminder/actions/workflows/test.yml/badge.svg)](https://github.com/lkshrk/sonarr-season-reminder/actions/workflows/test.yml)
-[![Release](https://github.com/lkshrk/sonarr-season-reminder/actions/workflows/release.yml/badge.svg)](https://github.com/lkshrk/sonarr-season-reminder/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Sends webhook notifications when TV show seasons are completed in your Sonarr library.
