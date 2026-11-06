@@ -1,6 +1,10 @@
 name: Release
 
 on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
   schedule:
     - cron: '0 12 * * 1' # Every Monday at 12:00 UTC
   workflow_dispatch:
@@ -28,6 +32,9 @@ permissions:
 jobs:
   release:
     name: Release
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -37,7 +44,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify latest CI Pipeline on main succeeded
-        if: ${{ !inputs.force }}
+        if: ${{ github.event_name != 'workflow_run' && !inputs.force }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
